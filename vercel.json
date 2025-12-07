@@ -1,11 +1,3 @@
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "installCommand": "npm install",
-  "framework": "vite",
-  "functions": {
-    "api/analyze-geology.ts": {
-      "runtime": "@vercel/node@18"
-    }
-  }
+  "framework": "nextjs"
 }
