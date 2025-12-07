@@ -5,7 +5,7 @@
   "framework": "vite",
   "functions": {
     "api/analyze-geology.ts": {
-      "runtime": "nodejs18.x"
+      "runtime": "@vercel/node@18"
     }
   }
 }
