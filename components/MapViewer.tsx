@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Map, TileLayer, WMSTileLayer, useMapEvents, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, WMSTileLayer, useMapEvents, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Coordinates, WMSData } from '../types';
 
@@ -208,7 +208,7 @@ const MapViewer: React.FC<MapViewerProps> = ({ onLocationSelect, selectedCoords 
 
   return (
     <div className="h-full w-full relative z-0">
-      <Map center={position} zoom={6} scrollWheelZoom={true} className="h-full w-full">
+      <MapContainer center={position} zoom={6} scrollWheelZoom={true} className="h-full w-full">
         <SearchControl />
         
         {/* Background Layer: OpenStreetMap for context */}
@@ -238,7 +238,7 @@ const MapViewer: React.FC<MapViewerProps> = ({ onLocationSelect, selectedCoords 
             </Popup>
           </Marker>
         )}
-      </Map>
+      </MapContainer>
 
       {/* Legend Overlay Hint */}
       <div className="absolute bottom-6 left-6 z-[1000] bg-white/90 p-3 rounded-lg shadow-md backdrop-blur-sm text-xs max-w-xs pointer-events-none">
