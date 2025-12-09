@@ -1,8 +1,18 @@
 import React, { useState, useCallback } from 'react';
-import MapViewer from './components/MapViewer';
+import dynamic from 'next/dynamic';
 import AnalysisPanel from './components/AnalysisPanel';
 import { GeologyAnalysis, LoadingState, Coordinates, WMSData } from './types';
 import { analyzeGeologyAtLocation } from './services/geminiService';
+
+// Dynamic import for MapViewer to avoid SSR issues with Leaflet (window is not defined)
+const MapViewer = dynamic(() => import('./components/MapViewer'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full w-full flex items-center justify-center bg-slate-200">
+      <div className="animate-spin h-8 w-8 border-4 border-emerald-500 rounded-full border-t-transparent"></div>
+    </div>
+  )
+});
 
 const App: React.FC = () => {
   const [status, setStatus] = useState<LoadingState>(LoadingState.IDLE);
@@ -36,14 +46,14 @@ const App: React.FC = () => {
     <div className="flex h-screen w-screen overflow-hidden bg-slate-100">
       {/* Main Map Area */}
       <div className={`flex-grow h-full relative transition-all duration-300 ease-in-out ${isPanelOpen ? 'md:mr-0' : ''}`}>
-        <MapViewer 
-          onLocationSelect={handleLocationSelect} 
-          selectedCoords={selectedCoords} 
+        <MapViewer
+          onLocationSelect={handleLocationSelect}
+          selectedCoords={selectedCoords}
         />
-        
+
         {/* Mobile toggle if panel is closed but we have data */}
         {!isPanelOpen && analysisData && (
-          <button 
+          <button
             onClick={() => setIsPanelOpen(true)}
             className="absolute bottom-6 right-6 z-[1000] bg-emerald-600 text-white p-3 rounded-full shadow-lg hover:bg-emerald-700 transition-colors md:hidden"
           >
@@ -53,15 +63,14 @@ const App: React.FC = () => {
       </div>
 
       {/* Side Panel */}
-      <div 
-        className={`fixed inset-y-0 right-0 z-[2000] w-full md:w-96 transform transition-transform duration-300 ease-in-out md:relative md:transform-none shadow-2xl md:shadow-none ${
-          isPanelOpen ? 'translate-x-0' : 'translate-x-full md:hidden'
-        }`}
+      <div
+        className={`fixed inset-y-0 right-0 z-[2000] w-full md:w-96 transform transition-transform duration-300 ease-in-out md:relative md:transform-none shadow-2xl md:shadow-none ${isPanelOpen ? 'translate-x-0' : 'translate-x-full md:hidden'
+          }`}
       >
-        <AnalysisPanel 
-          status={status} 
-          data={analysisData} 
-          error={error} 
+        <AnalysisPanel
+          status={status}
+          data={analysisData}
+          error={error}
           onClose={closePanel}
         />
       </div>

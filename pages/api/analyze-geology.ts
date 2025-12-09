@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { GeologyAnalysis, WMSData } from "../types";
+import { GeologyAnalysis, WMSData } from "../../types";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
