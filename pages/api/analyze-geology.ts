@@ -19,34 +19,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const ai = new GoogleGenAI({ apiKey });
 
-    // Prepare contents array (Text + Optional Image)
-    const contentsParts: any[] = [];
-
-    // 1. Image Part (Visual Grounding) - if available
-    if (wmsData?.mapImageBase64) {
-      contentsParts.push({
-        inlineData: {
-          mimeType: 'image/jpeg',
-          data: wmsData.mapImageBase64
-        }
-      });
-    }
-
-    // 2. Parse WMS response for direct code extraction
+    // Parse WMS response for direct code extraction
     let extractedCode = "";
-    let extractedNotation = "";
     let extractedDescription = "";
 
     if (wmsData && wmsData.rawResponse) {
-      // Try to parse as JSON (from vector layer)
       try {
         const jsonData = JSON.parse(wmsData.rawResponse);
         if (jsonData.features && jsonData.features.length > 0) {
           const props = jsonData.features[0].properties;
           extractedCode = props.NOTATION || props.CODE || props.notation || props.code || "";
-          extractedNotation = props.NOTATION || props.DESCR || props.LEGENDE || "";
           extractedDescription = props.DESCR || props.DESCRIPTION || props.descr || "";
-          console.log("Extracted from vector layer:", { extractedCode, extractedNotation, extractedDescription });
+          console.log("Extracted from vector layer:", { extractedCode, extractedDescription });
         }
       } catch (e) {
         // Not JSON, try text parsing
@@ -58,100 +42,63 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    // 3. Build context with explicit priority on WMS data
-    let contextData = "";
+    // Build a simpler prompt
+    let wmsInfo = "";
     if (extractedCode) {
-      contextData = `
-      ⚠️ DONNÉE OFFICIELLE BRGM (PRIORITÉ ABSOLUE) ⚠️
-      Le serveur cartographique BRGM a retourné le CODE EXACT suivant pour ce point :
-      CODE/NOTATION = "${extractedCode}"
-      ${extractedDescription ? `DESCRIPTION = "${extractedDescription}"` : ""}
-      
-      TU DOIS OBLIGATOIREMENT utiliser ce code "${extractedCode}" dans ta réponse.
-      NE PAS INVENTER un autre code. Le code BRGM fait autorité.
-      `;
-    } else if (wmsData && wmsData.rawResponse) {
-      contextData = `
-      DONNÉES SERVEUR BRGM (à analyser) :
-      Voici la réponse brute du serveur cartographique :
-      "${wmsData.rawResponse}"
-      
-      Cherche le code/notation géologique dans cette réponse.
-      Si tu trouves un code (ex: n4, J9, e7, K2...), utilise-le exactement.
-      `;
-    } else {
-      contextData = `
-      ⚠️ ATTENTION : Aucune donnée serveur disponible.
-      Analyse l'image de la carte géologique pour identifier le code.
-      Le code est généralement visible sur la carte (ex: n4, J9, e7, K2, p2d, b2...).
-      `;
+      wmsInfo = `CODE BRGM OFFICIEL: "${extractedCode}". Utilise OBLIGATOIREMENT ce code.`;
+    } else if (wmsData?.rawResponse) {
+      wmsInfo = `Données serveur BRGM: ${wmsData.rawResponse.substring(0, 500)}`;
     }
 
-    const prompt = `
-Tu es un expert géologue spécialisé dans la géologie française et les cartes du BRGM.
+    const prompt = `Tu es un expert géologue. Analyse ce point en France: Lat ${lat.toFixed(4)}, Lng ${lng.toFixed(4)}.
 
-COORDONNÉES DU POINT CLIQUÉ : Latitude ${lat.toFixed(5)}, Longitude ${lng.toFixed(5)}
+${wmsInfo}
 
-${contextData}
+Réponds UNIQUEMENT en JSON valide:
+{"code":"${extractedCode || 'code géologique'}","location_name":"commune","map_sheet":"feuille 1/50k","age":"âge stratigraphique","formation":"nom formation","lithology":"description roches","description":"contexte géologique","paleogeography":{"environment":"milieu de dépôt","climate":"climat ancien","sea_level":"niveau marin","context":"description paysage ancien"},"fossils":["fossile1","fossile2"]}`;
 
-${wmsData?.mapImageBase64 ? `
-IMAGE DE LA CARTE GÉOLOGIQUE :
-J'ai joint une capture de la carte géologique centrée sur le point cliqué.
-Le code géologique est souvent inscrit sur la carte (lettres/chiffres comme "n4", "J9", "e7"...).
-${extractedCode ? `Le code BRGM "${extractedCode}" doit correspondre à ce que tu vois sur l'image.` : "Identifie le code visible sur l'image."}
-` : ""}
+    // Build content parts
+    const parts: any[] = [];
 
-TA MISSION :
-1. IDENTIFIER le code géologique EXACT (${extractedCode ? `utilise "${extractedCode}"` : "d'après l'image ou les données serveur"})
-2. Déterminer l'âge géologique correspondant à ce code
-3. Décrire la lithologie et la formation
-4. Reconstituer le paléo-environnement de cette époque
-5. Lister les fossiles typiques de cette formation en France
+    // Add image if available
+    if (wmsData?.mapImageBase64) {
+      parts.push({
+        inlineData: {
+          mimeType: 'image/jpeg',
+          data: wmsData.mapImageBase64
+        }
+      });
+    }
 
-RÈGLES IMPORTANTES :
-- Le CODE doit être EXACTEMENT celui fourni par le BRGM${extractedCode ? ` : "${extractedCode}"` : ""}
-- Ne pas inventer de code - utiliser uniquement les données fournies
-- Si incertain, indique "Code incertain" mais utilise quand même le code BRGM
+    // Add text prompt
+    parts.push({ text: prompt });
 
-RÉPONDS EN JSON VALIDE UNIQUEMENT (pas de markdown, pas de texte avant/après) :
-{
-  "code": "${extractedCode || 'Code de la carte'}",
-  "location_name": "Nom de la commune ou lieu-dit proche",
-  "map_sheet": "Numéro et nom de la feuille 1/50000",
-  "age": "Âge stratigraphique complet (ex: Miocène supérieur, Tortonien)",
-  "formation": "Nom de la formation géologique",
-  "lithology": "Description lithologique détaillée",
-  "description": "Synthèse géologique du contexte local",
-  "paleogeography": {
-    "environment": "Type d'environnement de dépôt (ex: Mer épicontinentale, Lac, Delta)",
-    "climate": "Climat de l'époque (ex: Tropical humide, Tempéré)",
-    "sea_level": "Contexte eustatique (ex: Transgression marine)",
-    "context": "Description narrative du paysage ancien"
-  },
-  "fossils": ["Liste", "des", "fossiles", "caractéristiques"]
-}
-`;
-
-    contentsParts.push({ text: prompt });
-
-    console.log("Calling Gemini API with extracted code:", extractedCode || "none");
+    console.log("Calling Gemini API, code:", extractedCode || "none", "hasImage:", !!wmsData?.mapImageBase64);
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: contentsParts
+      contents: parts
     });
 
     let text = response.text;
-    console.log("Gemini response received, length:", text?.length || 0);
+    console.log("Response length:", text?.length || 0);
+
+    if (!text) {
+      // Try without image
+      console.log("Empty response, retrying without image...");
+      const retryResponse = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt
+      });
+      text = retryResponse.text;
+    }
 
     if (!text) {
       throw new Error("Réponse vide de l'IA");
     }
 
-    // Clean Markdown code blocks
+    // Clean response
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-
-    // Extract JSON substring
     const firstBrace = text.indexOf('{');
     const lastBrace = text.lastIndexOf('}');
     if (firstBrace !== -1 && lastBrace !== -1) {
@@ -162,13 +109,13 @@ RÉPONDS EN JSON VALIDE UNIQUEMENT (pas de markdown, pas de texte avant/après) 
     try {
       data = JSON.parse(text);
     } catch (e) {
-      console.error("JSON Parse Error. Raw response:", text);
-      throw new Error("Format de réponse invalide - impossible de parser le JSON.");
+      console.error("JSON Parse Error:", text.substring(0, 200));
+      throw new Error("Format de réponse invalide");
     }
 
-    // Force the code to be the extracted one if we have it
+    // Force the correct code if we extracted one
     if (extractedCode && data.code !== extractedCode) {
-      console.warn(`AI returned code "${data.code}" but BRGM said "${extractedCode}". Overriding.`);
+      console.warn(`Overriding code: "${data.code}" -> "${extractedCode}"`);
       data.code = extractedCode;
     }
 
@@ -178,15 +125,13 @@ RÉPONDS EN JSON VALIDE UNIQUEMENT (pas de markdown, pas de texte avant/après) 
       sources: []
     };
 
-    console.log("Successfully parsed geology analysis:", data.code, "-", data.formation);
+    console.log("Success:", data.code, data.formation);
     res.status(200).json(result);
 
   } catch (error: any) {
-    console.error("Erreur Gemini complète:", error);
-    const errorMessage = error?.message || error?.toString() || "Erreur inconnue";
+    console.error("Error:", error?.message || error);
     res.status(500).json({
-      error: `Erreur d'analyse: ${errorMessage}`,
-      details: process.env.NODE_ENV === 'development' ? error?.stack : undefined
+      error: `Erreur d'analyse: ${error?.message || "Erreur inconnue"}`
     });
   }
 }
