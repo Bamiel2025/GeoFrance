@@ -57,7 +57,7 @@ export default async function handler(req: any, res: any) {
     2. RECONSTITUE LE PASSÉ (Paléogéographie) : À quoi ressemblait cet endroit à cette époque géologique précise ? (Mer profonde, plage tropicale, lac, chaîne de montagne ?). Quel était le climat ?
     3. IDENTIFIE LA VIE (Fossiles) : Quels sont les fossiles typiques que l'on trouve dans cette formation spécifique en France ?
 
-    FORMAT DE RÉPONSE ATTENDU (JSON pur) :
+    FORMAT DE RÉPONSE ATTENDU (JSON pur, sans markdown) :
     {
       "code": "Code notation retenu (ex: J9ad)",
       "location_name": "Commune / Lieu-dit",
@@ -79,13 +79,10 @@ export default async function handler(req: any, res: any) {
   contentsParts.push({ text: prompt });
 
   try {
+    // Use gemini-2.0-flash which is publicly available and supports multimodal
     const response = await ai.models.generateContent({
-      model: "gemini-3-pro-preview", // Multimodal model is required
-      contents: { parts: contentsParts },
-      config: {
-        thinkingConfig: { thinkingBudget: 2048 },
-        tools: [{ googleSearch: {} }]
-      },
+      model: "gemini-2.0-flash",
+      contents: { parts: contentsParts }
     });
 
     let text = response.text;
@@ -109,22 +106,16 @@ export default async function handler(req: any, res: any) {
       throw new Error("Format de réponse invalide.");
     }
 
-    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-    const sources = groundingChunks
-      .map((chunk: any) => chunk.web)
-      .filter((web: any) => web && web.uri && web.title)
-      .map((web: any) => ({ uri: web.uri, title: web.title }));
-
     const result: GeologyAnalysis = {
       ...data,
       coords: { lat, lng },
-      sources
+      sources: []
     };
 
     res.status(200).json(result);
 
-  } catch (error) {
-    console.error("Erreur Gemini:", error);
-    res.status(500).json({ error: "Impossible d'analyser la géologie." });
+  } catch (error: any) {
+    console.error("Erreur Gemini:", error?.message || error);
+    res.status(500).json({ error: error?.message || "Impossible d'analyser la géologie." });
   }
 }
