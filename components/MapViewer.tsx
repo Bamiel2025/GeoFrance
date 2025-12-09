@@ -23,7 +23,7 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
     reader.onloadend = () => {
       const base64String = reader.result as string;
       // Remove data url prefix to get just base64 for Gemini
-      const base64 = base64String.split(',')[1]; 
+      const base64 = base64String.split(',')[1];
       resolve(base64);
     };
     reader.onerror = reject;
@@ -37,39 +37,74 @@ const fetchBrgmData = async (map: L.Map, latlng: L.LatLng): Promise<WMSData | nu
     const point = map.latLngToContainerPoint(latlng);
     const size = map.getSize();
     const bounds = map.getBounds();
-    
-    // --- 1. GetFeatureInfo (The Truth Data) ---
-    // CRITICAL FIX: Use WMS 1.1.1. 
-    // WMS 1.3.0 with EPSG:4326 expects axis order Lat,Lon. Leaflet sends Lon,Lat.
-    // WMS 1.1.1 expects Lon,Lat which matches Leaflet's bounds.toBBoxString().
-    const infoParams: Record<string, string> = {
+
+    // --- 1. GetFeatureInfo from VECTOR layer (structured data) ---
+    // Use GEO50K_HARM which is the harmonized vector geological layer
+    // This returns actual attribute data including NOTATION, DESCR, etc.
+    const vectorParams: Record<string, string> = {
       request: 'GetFeatureInfo',
       service: 'WMS',
-      srs: 'EPSG:4326', // Coordinate system
+      srs: 'EPSG:4326',
       styles: '',
       transparent: 'true',
-      version: '1.1.1', // Changed from 1.3.0 to fix coordinate inversion bug
+      version: '1.1.1',
       format: 'image/png',
-      bbox: bounds.toBBoxString(), // "west,south,east,north" matches 1.1.1
+      bbox: bounds.toBBoxString(),
       height: size.y.toString(),
       width: size.x.toString(),
-      layers: 'SCAN_D_GEOL50',
-      query_layers: 'SCAN_D_GEOL50',
-      info_format: 'text/plain', // Request text for easier parsing, fall back to html if needed
-      x: Math.round(point.x).toString(), // 'x' and 'y' for WMS 1.1.1 (instead of i,j)
-      y: Math.round(point.y).toString()
+      layers: 'GEO50K_HARM',
+      query_layers: 'GEO50K_HARM',
+      info_format: 'application/json', // Request JSON for structured parsing
+      x: Math.round(point.x).toString(),
+      y: Math.round(point.y).toString(),
+      feature_count: '1'
     };
 
-    const infoUrl = 'https://geoservices.brgm.fr/geologie?' + new URLSearchParams(infoParams).toString();
-    const infoResponse = await fetch(infoUrl);
-    const rawResponse = await infoResponse.text();
+    const vectorUrl = 'https://geoservices.brgm.fr/geologie?' + new URLSearchParams(vectorParams).toString();
+    const vectorResponse = await fetch(vectorUrl);
+    let rawResponse = '';
+
+    if (vectorResponse.ok) {
+      const vectorData = await vectorResponse.text();
+      rawResponse = vectorData;
+      console.log("WMS Vector Response:", vectorData);
+    }
+
+    // Fallback: Also try the SCAN layer for text info if vector fails
+    if (!rawResponse || rawResponse === '{}' || rawResponse.includes('"features":[]')) {
+      const scanParams: Record<string, string> = {
+        request: 'GetFeatureInfo',
+        service: 'WMS',
+        srs: 'EPSG:4326',
+        styles: '',
+        transparent: 'true',
+        version: '1.1.1',
+        format: 'image/png',
+        bbox: bounds.toBBoxString(),
+        height: size.y.toString(),
+        width: size.x.toString(),
+        layers: 'SCAN_D_GEOL50',
+        query_layers: 'SCAN_D_GEOL50',
+        info_format: 'text/plain',
+        x: Math.round(point.x).toString(),
+        y: Math.round(point.y).toString()
+      };
+
+      const scanUrl = 'https://geoservices.brgm.fr/geologie?' + new URLSearchParams(scanParams).toString();
+      const scanResponse = await fetch(scanUrl);
+      if (scanResponse.ok) {
+        const scanText = await scanResponse.text();
+        if (scanText && scanText.trim().length > 10) {
+          rawResponse = scanText;
+        }
+      }
+    }
 
     // --- 2. GetMap (The Visual Context) ---
-    // Fetch a small tile centered on the click to let AI "see" the map code
-    // Create a small bbox around the click (approx 500m window)
-    const delta = 0.01; 
+    // Fetch a small tile centered on the click to let AI "see" the map
+    const delta = 0.005; // Smaller window for better precision
     const mapBbox = `${latlng.lng - delta},${latlng.lat - delta},${latlng.lng + delta},${latlng.lat + delta}`;
-    
+
     const mapParams: Record<string, string> = {
       request: 'GetMap',
       service: 'WMS',
@@ -86,7 +121,7 @@ const fetchBrgmData = async (map: L.Map, latlng: L.LatLng): Promise<WMSData | nu
     const mapUrl = 'https://geoservices.brgm.fr/geologie?' + new URLSearchParams(mapParams).toString();
     const mapResponse = await fetch(mapUrl);
     let mapImageBase64 = undefined;
-    
+
     if (mapResponse.ok) {
       const blob = await mapResponse.blob();
       mapImageBase64 = await blobToBase64(blob);
@@ -113,7 +148,7 @@ const SearchControl = () => {
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
-    
+
     setLoading(true);
     try {
       // Limit search to France (codes 'fr')
@@ -139,41 +174,41 @@ const SearchControl = () => {
     <div className="absolute top-4 left-14 md:left-16 z-[1000] w-64 md:w-80 font-sans">
       <div className="relative group">
         <form onSubmit={handleSearch}>
-            <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-            </div>
-            <input 
-                type="text" 
-                className="block w-full p-2.5 pl-10 text-sm text-slate-900 bg-white/95 backdrop-blur border border-slate-300 rounded-lg shadow-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 placeholder-slate-500" 
-                placeholder="Rechercher une ville..." 
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-            />
-            <button type="submit" className="absolute inset-y-0 right-0 flex items-center pr-3">
-                {loading ? (
-                    <div className="animate-spin h-4 w-4 border-2 border-emerald-500 rounded-full border-t-transparent"></div>
-                ) : (
-                   <span className="sr-only">Rechercher</span>
-                )}
-            </button>
+          <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+          </div>
+          <input
+            type="text"
+            className="block w-full p-2.5 pl-10 text-sm text-slate-900 bg-white/95 backdrop-blur border border-slate-300 rounded-lg shadow-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 placeholder-slate-500"
+            placeholder="Rechercher une ville..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <button type="submit" className="absolute inset-y-0 right-0 flex items-center pr-3">
+            {loading ? (
+              <div className="animate-spin h-4 w-4 border-2 border-emerald-500 rounded-full border-t-transparent"></div>
+            ) : (
+              <span className="sr-only">Rechercher</span>
+            )}
+          </button>
         </form>
 
         {results.length > 0 && (
-            <div className="absolute z-20 w-full mt-1 bg-white rounded-lg shadow-xl border border-slate-100 max-h-60 overflow-y-auto">
-                <ul className="py-1 text-sm text-slate-700">
-                    {results.map((place, i) => (
-                        <li key={i}>
-                            <button 
-                                type="button" 
-                                className="inline-flex w-full px-4 py-2 hover:bg-emerald-50 text-left border-b border-slate-50 last:border-0"
-                                onClick={() => handleSelect(place.lat, place.lon)}
-                            >
-                                <span className="truncate">{place.display_name}</span>
-                            </button>
-                        </li>
-                    ))}
-                </ul>
-            </div>
+          <div className="absolute z-20 w-full mt-1 bg-white rounded-lg shadow-xl border border-slate-100 max-h-60 overflow-y-auto">
+            <ul className="py-1 text-sm text-slate-700">
+              {results.map((place, i) => (
+                <li key={i}>
+                  <button
+                    type="button"
+                    className="inline-flex w-full px-4 py-2 hover:bg-emerald-50 text-left border-b border-slate-50 last:border-0"
+                    onClick={() => handleSelect(place.lat, place.lon)}
+                  >
+                    <span className="truncate">{place.display_name}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </div>
     </div>
@@ -182,12 +217,12 @@ const SearchControl = () => {
 
 const MapEvents: React.FC<{ onLocationSelect: (coords: Coordinates, wmsData: WMSData | null) => void }> = ({ onLocationSelect }) => {
   const map = useMap();
-  
+
   useMapEvents({
     async click(e) {
       // 1. Set coords immediately
       const coords = { lat: e.latlng.lat, lng: e.latlng.lng };
-      
+
       // 2. Fetch data (WMS Info + Visual Tile)
       let wmsData = null;
       try {
@@ -210,14 +245,14 @@ const MapViewer: React.FC<MapViewerProps> = ({ onLocationSelect, selectedCoords 
     <div className="h-full w-full relative z-0">
       <MapContainer center={position} zoom={6} scrollWheelZoom={true} className="h-full w-full">
         <SearchControl />
-        
+
         {/* Background Layer: OpenStreetMap for context */}
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           opacity={0.4}
         />
-        
+
         {/* BRGM WMS Layer - Geology 1/50 000 (Image Scan) */}
         <WMSTileLayer
           url="https://geoservices.brgm.fr/geologie"
