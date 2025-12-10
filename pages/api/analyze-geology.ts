@@ -42,19 +42,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    // Build a simpler prompt
+    const manualCode = wmsData?.manualCode;
+
+    // Build prompt based on available inputs
     let wmsInfo = "";
-    if (extractedCode) {
+    let instructions = "";
+
+    if (manualCode) {
+      // CASE 1: User provided a manual code. This is the absolute truth.
+      wmsInfo = `USER_INPUT: The user has manually identified the code as "${manualCode}".`;
+      instructions = `1. TRUST THE USER INPUT "${manualCode}" 100%. \n2. Ignore any conflicting info from the database or image regarding the code identity.\n3. Output code "${manualCode}".\n4. Use your internal knowledge to provide the description for "${manualCode}".`;
+    } else if (extractedCode) {
+      // CASE 2: WMS Hint available, but Visual Priority Rule applies.
       wmsInfo = `DB_HINT: The database suggests code "${extractedCode}" (${extractedDescription}).
 WARNING: The database layer (GEO50K_HARM) is often spatially misaligned with the visual map (SCAN_D_GEOL50).
 You MUST inspect the image. The code printed on the map text (e.g. 'j9ad', 't2', 'n4') is the ONLY source of truth.
 If the text on the map is different from "${extractedCode}", IGNORE the database hint completely and analyze the map code.`;
+      instructions = `1. Read the code text directly under or near the blue marker pin on the image.\n2. If the text on the map (e.g., 'j9ad') contradicts the DB_HINT (e.g., 'e8b-9'), TRUST THE IMAGE.\n3. Output the code from the image.\n4. Provide the geological description for the *image code*.`;
     } else if (wmsData?.rawResponse) {
+      // CASE 3: Only raw WMS text available
       wmsInfo = `DB_HINT: Database raw response: ${wmsData.rawResponse.substring(0, 500)}`;
+      instructions = `1. Identify the code from the map image.\n2. Use the DB_HINT only if the image is unclear.\n3. Provide the description.`;
+    } else {
+      // CASE 4: No WMS info
+      instructions = `1. Identify the geological code strictly from the map image.\n2. Provide the description.`;
     }
 
     const prompt = `You are an expert geologist analysing a geological map of France (BRGM 1/50000).
-Your Goal: Identify the geological unit EXACTLY as written on the map image.
+Your Goal: Identify the geological unit EXACTLY as written on the map image or provided by the user.
 
 Context:
 Location: Lat ${lat.toFixed(4)}, Lng ${lng.toFixed(4)}
@@ -62,13 +77,10 @@ ${wmsInfo}
 Visual Map: See attached image.
 
 INSTRUCTIONS:
-1.  Read the code text directly under or near the blue marker pin on the image.
-2.  If the text on the map (e.g., 'j9ad') contradicts the DB_HINT (e.g., 'e8b-9'), TRUST THE IMAGE.
-3.  Output the code from the image.
-4.  Provide the geological description for the *image code*. Use your internal knowledge if the DB_HINT doesn't match the image code.
+${instructions}
 
 Response strictly in valid JSON:
-{"code":"[Exact code from map image]","location_name":"commune","map_sheet":"feuille 1/50k","age":"stratigraphic age","formation":"formation name","lithology":"rock description","description":"detailed geological context corresponding to the MAP CODE","paleogeography":{"environment":"depositional environment","climate":"paleoclimate","sea_level":"sea level","context":"landscape description"},"fossils":["fossil1","fossil2"]}`;
+{"code":"[Exact code]","location_name":"commune","map_sheet":"feuille 1/50k","age":"stratigraphic age","formation":"formation name","lithology":"rock description","description":"detailed geological context","paleogeography":{"environment":"depositional environment","climate":"paleoclimate","sea_level":"sea level","context":"landscape description"},"fossils":["fossil1","fossil2"]}`;
 
     // Build content parts
     const parts: any[] = [];

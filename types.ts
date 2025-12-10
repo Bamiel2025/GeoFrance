@@ -6,7 +6,7 @@ export interface GeologyAnalysis {
   lithology: string;
   formation: string;
   description: string;
-  
+
   // Nouveau contexte Paléo
   paleogeography: {
     environment: string; // Ex: Lagon tropical, Delta, Haute mer...
@@ -14,10 +14,10 @@ export interface GeologyAnalysis {
     sea_level: string;   // Ex: Transgression marine (montée des eaux)
     context: string;     // Description narrative courte
   };
-  
+
   // Nouveaux Fossiles
   fossils: string[];     // Liste des fossiles caractéristiques
-  
+
   coords: {
     lat: number;
     lng: number;
@@ -43,4 +43,5 @@ export interface Coordinates {
 export interface WMSData {
   rawResponse: string; // The HTML or Text returned by BRGM WMS GetFeatureInfo
   mapImageBase64?: string; // Visual snapshot of the map for AI analysis
+  manualCode?: string; // User-provided manual code override
 }
