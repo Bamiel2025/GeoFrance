@@ -45,7 +45,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Build a simpler prompt
     let wmsInfo = "";
     if (extractedCode) {
-      wmsInfo = `CODE BRGM OFFICIEL: "${extractedCode}". Utilise OBLIGATOIREMENT ce code.`;
+      wmsInfo = `Info Base de Données (Couche Harmonisée): Code "${extractedCode}", Description "${extractedCode} - ${extractedDescription}".
+ATTENTION: Ce code vient d'une couche harmonisée (simplifiée).
+La carte visuelle (image jointe) montre souvent une notation locale PLUS PRÉCISE (ex: j9ad, n4, etc.).
+SI TU VOIS UNE NOTATION DIFFÉRENTE SUR L'IMAGE, UTILISE CELLE DE L'IMAGE pour le champ "code" et adapte la description.
+Ne te limite pas au code harmonisé si l'image est plus précise.`;
     } else if (wmsData?.rawResponse) {
       wmsInfo = `Données serveur BRGM: ${wmsData.rawResponse.substring(0, 500)}`;
     }
@@ -55,7 +59,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 ${wmsInfo}
 
 Réponds UNIQUEMENT en JSON valide:
-{"code":"${extractedCode || 'code géologique'}","location_name":"commune","map_sheet":"feuille 1/50k","age":"âge stratigraphique","formation":"nom formation","lithology":"description roches","description":"contexte géologique","paleogeography":{"environment":"milieu de dépôt","climate":"climat ancien","sea_level":"niveau marin","context":"description paysage ancien"},"fossils":["fossile1","fossile2"]}`;
+{"code":"[Code lu sur l'image ou code harmonisé]","location_name":"commune","map_sheet":"feuille 1/50k","age":"âge stratigraphique","formation":"nom formation","lithology":"description roches","description":"contexte géologique précis (basé sur le code visuel)","paleogeography":{"environment":"milieu de dépôt","climate":"climat ancien","sea_level":"niveau marin","context":"description paysage ancien"},"fossils":["fossile1","fossile2"]}`;
 
     // Build content parts
     const parts: any[] = [];
@@ -113,10 +117,10 @@ Réponds UNIQUEMENT en JSON valide:
       throw new Error("Format de réponse invalide");
     }
 
-    // Force the correct code if we extracted one
+    // REMOVED: Force code override logic
+    // We now trust the AI's visual analysis over the harmonized layer if they differ
     if (extractedCode && data.code !== extractedCode) {
-      console.warn(`Overriding code: "${data.code}" -> "${extractedCode}"`);
-      data.code = extractedCode;
+      console.log(`AI chose code "${data.code}" over harmonized "${extractedCode}". Accepting AI choice.`);
     }
 
     const result: GeologyAnalysis = {
