@@ -31,6 +31,14 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
   });
 };
 
+// Helper to separate coordinate conversion logic
+const latLngToWebMercator = (lat: number, lng: number) => {
+  const r = 6378137;
+  const x = r * (lng * Math.PI) / 180;
+  const y = r * Math.log(Math.tan((Math.PI / 4) + (lat * Math.PI) / 360));
+  return { x, y };
+};
+
 // Helper to fetch FeatureInfo from BRGM WMS
 const fetchBrgmData = async (map: L.Map, latlng: L.LatLng): Promise<WMSData | null> => {
   try {
@@ -38,9 +46,8 @@ const fetchBrgmData = async (map: L.Map, latlng: L.LatLng): Promise<WMSData | nu
     const size = map.getSize();
     const bounds = map.getBounds();
 
-    // --- 1. GetFeatureInfo from VECTOR layer (structured data) ---
+    // --- 1. GetFeatureInfo (Keep 4326 for feature info as it works for text) ---
     // Use GEO50K_HARM which is the harmonized vector geological layer
-    // This returns actual attribute data including NOTATION, DESCR, etc.
     const vectorParams: Record<string, string> = {
       request: 'GetFeatureInfo',
       service: 'WMS',
@@ -48,13 +55,13 @@ const fetchBrgmData = async (map: L.Map, latlng: L.LatLng): Promise<WMSData | nu
       styles: '',
       transparent: 'true',
       version: '1.1.1',
-      format: 'image/png',
+      format: 'image/png', // Format of the map image being queried (virtual)
       bbox: bounds.toBBoxString(),
       height: size.y.toString(),
       width: size.x.toString(),
       layers: 'GEO50K_HARM',
       query_layers: 'GEO50K_HARM',
-      info_format: 'application/json', // Request JSON for structured parsing
+      info_format: 'application/json',
       x: Math.round(point.x).toString(),
       y: Math.round(point.y).toString(),
       feature_count: '1'
@@ -70,45 +77,17 @@ const fetchBrgmData = async (map: L.Map, latlng: L.LatLng): Promise<WMSData | nu
       console.log("WMS Vector Response:", vectorData);
     }
 
-    // Fallback: Also try the SCAN layer for text info if vector fails
-    if (!rawResponse || rawResponse === '{}' || rawResponse.includes('"features":[]')) {
-      const scanParams: Record<string, string> = {
-        request: 'GetFeatureInfo',
-        service: 'WMS',
-        srs: 'EPSG:4326',
-        styles: '',
-        transparent: 'true',
-        version: '1.1.1',
-        format: 'image/png',
-        bbox: bounds.toBBoxString(),
-        height: size.y.toString(),
-        width: size.x.toString(),
-        layers: 'SCAN_D_GEOL50',
-        query_layers: 'SCAN_D_GEOL50',
-        info_format: 'text/plain',
-        x: Math.round(point.x).toString(),
-        y: Math.round(point.y).toString()
-      };
-
-      const scanUrl = 'https://geoservices.brgm.fr/geologie?' + new URLSearchParams(scanParams).toString();
-      const scanResponse = await fetch(scanUrl);
-      if (scanResponse.ok) {
-        const scanText = await scanResponse.text();
-        if (scanText && scanText.trim().length > 10) {
-          rawResponse = scanText;
-        }
-      }
-    }
-
-    // --- 2. GetMap (The Visual Context) ---
-    // Fetch a small tile centered on the click to let AI "see" the map
-    const delta = 0.005; // Smaller window for better precision
-    const mapBbox = `${latlng.lng - delta},${latlng.lat - delta},${latlng.lng + delta},${latlng.lat + delta}`;
+    // --- 2. GetMap (The Visual Context - Force EPSG:3857) ---
+    // We explicitly calculate Web Mercator bounds to match Leaflet's view
+    const delta = 0.005; // degree delta roughly
+    const p1 = latLngToWebMercator(latlng.lat - delta, latlng.lng - delta);
+    const p2 = latLngToWebMercator(latlng.lat + delta, latlng.lng + delta);
+    const mapBbox = `${p1.x},${p1.y},${p2.x},${p2.y}`;
 
     const mapParams: Record<string, string> = {
       request: 'GetMap',
       service: 'WMS',
-      srs: 'EPSG:4326',
+      srs: 'EPSG:3857', // Use Web Mercator to match visual tiles
       styles: '',
       version: '1.1.1',
       format: 'image/jpeg',
@@ -119,12 +98,18 @@ const fetchBrgmData = async (map: L.Map, latlng: L.LatLng): Promise<WMSData | nu
     };
 
     const mapUrl = 'https://geoservices.brgm.fr/geologie?' + new URLSearchParams(mapParams).toString();
+    console.log("Fetching WMS Image:", mapUrl);
     const mapResponse = await fetch(mapUrl);
     let mapImageBase64 = undefined;
 
     if (mapResponse.ok) {
       const blob = await mapResponse.blob();
-      mapImageBase64 = await blobToBase64(blob);
+      // Verify usage of blob
+      if (blob.size > 2000) { // arbitrary threshold to filter out tiny XML errors
+        mapImageBase64 = await blobToBase64(blob);
+      } else {
+        console.warn("WMS Image too small, likely error or blank:", blob.size);
+      }
     }
 
     return {
