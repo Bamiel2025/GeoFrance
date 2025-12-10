@@ -204,88 +204,24 @@ const MapEvents: React.FC<{
   onLocationSelect: (coords: Coordinates, wmsData: WMSData | null) => void
 }> = ({ onLocationSelect }) => {
   const map = useMap();
-  const [popupPosition, setPopupPosition] = useState<L.LatLng | null>(null);
-  const [manualCode, setManualCode] = useState('');
-  const [loading, setLoading] = useState(false);
 
   useMapEvents({
-    click(e) {
-      setPopupPosition(e.latlng);
-      setManualCode(''); // Reset on new click
+    async click(e) {
+      // 1. Set coords immediately
+      const coords = { lat: e.latlng.lat, lng: e.latlng.lng };
+
+      // 2. Fetch data (WMS Info + Visual Tile)
+      let wmsData: WMSData | null = null;
+      try {
+        wmsData = await fetchBrgmData(map, e.latlng);
+      } catch (err) {
+        console.error("Error fetching WMS data", err);
+      }
+
+      onLocationSelect(coords, wmsData);
     },
   });
-
-  const handleConfirm = async () => {
-    if (!popupPosition) return;
-
-    setLoading(true);
-    // 1. Set coords
-    const coords = { lat: popupPosition.lat, lng: popupPosition.lng };
-
-    // 2. Fetch data (WMS Info + Visual Tile)
-    let wmsData: WMSData | null = null;
-    try {
-      wmsData = await fetchBrgmData(map, popupPosition);
-    } catch (err) {
-      console.error("Error fetching WMS data", err);
-    }
-
-    // 3. Inject manual code if provided
-    if (manualCode.trim() && wmsData) {
-      wmsData.manualCode = manualCode.trim();
-    } else if (manualCode.trim() && !wmsData) {
-      wmsData = { rawResponse: '', manualCode: manualCode.trim() };
-    }
-
-    setLoading(false);
-    setPopupPosition(null); // Close popup
-    onLocationSelect(coords, wmsData);
-  };
-
-  return popupPosition ? (
-    <Popup
-      position={popupPosition}
-      eventHandlers={{
-        remove: () => {
-          // Only clear if we are not loading (prevents accidental close during processing if logic differs)
-          // But actually, for this UI, remove event happens when user clicks 'x' or outside. 
-          // We should sync state.
-          setPopupPosition(null);
-        }
-      }}
-    >
-      <div className="p-2 min-w-[200px] text-center font-sans">
-        <h3 className="font-bold text-slate-700 mb-2">Analyser ce point</h3>
-        <div className="mb-3">
-          <label className="block text-xs text-slate-500 mb-1 text-left">Code manuel (optionnel)</label>
-          <input
-            type="text"
-            value={manualCode}
-            onChange={(e) => setManualCode(e.target.value)}
-            placeholder="Ex: j9ad, C6, n4..."
-            className="w-full border border-slate-300 rounded px-2 py-1 text-sm focus:border-emerald-500 focus:outline-none"
-          />
-          <p className="text-[10px] text-slate-400 mt-1 text-left leading-tight">
-            Si l'IA ne reconnaît pas le code, aidez-la en le saisissant ici.
-          </p>
-        </div>
-        <button
-          onClick={handleConfirm}
-          disabled={loading}
-          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium py-1.5 rounded transition-colors flex items-center justify-center gap-2"
-        >
-          {loading ? (
-            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-          ) : (
-            <>
-              <span>Lancer l'analyse</span>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
-            </>
-          )}
-        </button>
-      </div>
-    </Popup>
-  ) : null;
+  return null;
 };
 
 const MapViewer: React.FC<MapViewerProps> = ({ onLocationSelect, selectedCoords }) => {
