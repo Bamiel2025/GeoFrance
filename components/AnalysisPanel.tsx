@@ -6,12 +6,24 @@ interface AnalysisPanelProps {
   data: GeologyAnalysis | null;
   error: string | null;
   onClose: () => void;
+  onManualCorrection: (code: string) => void;
 }
 
 type Tab = 'strati' | 'paleo' | 'fossils';
 
-const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ status, data, error, onClose }) => {
+const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ status, data, error, onClose, onManualCorrection }) => {
   const [activeTab, setActiveTab] = useState<Tab>('strati');
+  const [isEditing, setIsEditing] = useState(false);
+  const [editCode, setEditCode] = useState('');
+
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editCode.trim()) {
+      onManualCorrection(editCode.trim());
+      setIsEditing(false);
+      setEditCode('');
+    }
+  };
 
   if (status === LoadingState.IDLE) {
     return (
@@ -26,7 +38,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ status, data, error, onCl
 
   return (
     <div className="h-full flex flex-col bg-white border-l border-slate-200 shadow-xl overflow-hidden w-full md:w-96 absolute right-0 top-0 z-[2000] md:relative font-sans">
-      
+
       {/* Header */}
       <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-white z-10">
         <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
@@ -60,18 +72,57 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ status, data, error, onCl
                 Erreur
               </div>
               {error}
+              <div className="mt-3 pt-3 border-t border-red-100">
+                <p className="text-xs mb-2 text-slate-600">Le code n'a pas été reconnu ? Essayez de le saisir manuellement :</p>
+                <form onSubmit={handleEditSubmit} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={editCode}
+                    onChange={(e) => setEditCode(e.target.value)}
+                    placeholder="Ex: J9ad"
+                    className="flex-1 text-sm border-slate-300 rounded px-2 py-1"
+                  />
+                  <button type="submit" className="bg-red-100 hover:bg-red-200 text-red-700 text-xs px-3 py-1 rounded font-medium transition-colors">Corriger</button>
+                </form>
+              </div>
             </div>
           </div>
         )}
 
         {status === LoadingState.SUCCESS && data && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            
+
             {/* Top Summary Card */}
             <div className="bg-slate-50 p-4 border-b border-slate-100">
               <div className="flex justify-between items-start mb-2">
-                 <div className="text-xs font-mono text-slate-500 uppercase">{data.location_name}</div>
-                 <div className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded border border-emerald-200">{data.code}</div>
+                <div className="text-xs font-mono text-slate-500 uppercase">{data.location_name}</div>
+                <div className="flex items-center gap-2">
+                  {isEditing ? (
+                    <form onSubmit={handleEditSubmit} className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        autoFocus
+                        value={editCode}
+                        onChange={(e) => setEditCode(e.target.value)}
+                        placeholder="Code"
+                        className="w-16 h-6 text-[10px] px-1 border border-emerald-300 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
+                      <button type="submit" className="bg-emerald-500 hover:bg-emerald-600 text-white rounded p-1">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                      </button>
+                      <button type="button" onClick={() => setIsEditing(false)} className="bg-slate-200 hover:bg-slate-300 text-slate-500 rounded p-1">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                      </button>
+                    </form>
+                  ) : (
+                    <div className="group flex items-center gap-1 cursor-pointer" onClick={() => { setIsEditing(true); setEditCode(data.code); }} title="Corriger manuellement le code">
+                      <div className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded border border-emerald-200 group-hover:bg-emerald-200 transition-colors">
+                        {data.code}
+                      </div>
+                      <svg className="w-3 h-3 text-slate-300 group-hover:text-emerald-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                    </div>
+                  )}
+                </div>
               </div>
               <h1 className="text-xl font-bold text-slate-900 leading-tight mb-1">{data.formation}</h1>
               <p className="text-sm font-medium text-emerald-600">{data.age}</p>
@@ -79,19 +130,19 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ status, data, error, onCl
 
             {/* Navigation Tabs */}
             <div className="flex border-b border-slate-200 sticky top-0 bg-white z-10">
-              <button 
+              <button
                 onClick={() => setActiveTab('strati')}
                 className={`flex-1 py-3 text-xs font-semibold uppercase tracking-wide transition-colors border-b-2 ${activeTab === 'strati' ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
               >
                 Stratigraphie
               </button>
-              <button 
+              <button
                 onClick={() => setActiveTab('paleo')}
                 className={`flex-1 py-3 text-xs font-semibold uppercase tracking-wide transition-colors border-b-2 ${activeTab === 'paleo' ? 'border-blue-500 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
               >
                 Paléo
               </button>
-              <button 
+              <button
                 onClick={() => setActiveTab('fossils')}
                 className={`flex-1 py-3 text-xs font-semibold uppercase tracking-wide transition-colors border-b-2 ${activeTab === 'fossils' ? 'border-amber-500 text-amber-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
               >
@@ -101,7 +152,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ status, data, error, onCl
 
             {/* Content Area */}
             <div className="p-5">
-              
+
               {/* --- STRATIGRAPHIE TAB --- */}
               {activeTab === 'strati' && (
                 <div className="space-y-4">
@@ -116,10 +167,10 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ status, data, error, onCl
                       </p>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center justify-between text-xs text-slate-500 border-t border-slate-100 pt-3">
-                     <span>Feuille : {data.map_sheet}</span>
-                     <span>Lat: {data.coords.lat.toFixed(4)}, Lng: {data.coords.lng.toFixed(4)}</span>
+                    <span>Feuille : {data.map_sheet}</span>
+                    <span>Lat: {data.coords.lat.toFixed(4)}, Lng: {data.coords.lng.toFixed(4)}</span>
                   </div>
                 </div>
               )}
@@ -127,49 +178,49 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ status, data, error, onCl
               {/* --- PALEOGEOGRAPHIE TAB --- */}
               {activeTab === 'paleo' && (
                 <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300">
-                   <div className="relative rounded-xl overflow-hidden bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 p-4">
-                      <div className="absolute top-0 right-0 p-3 opacity-10">
-                         <svg className="w-24 h-24 text-blue-900" fill="currentColor" viewBox="0 0 24 24"><path d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                      </div>
-                      
-                      <h3 className="text-xs font-bold text-blue-800 uppercase tracking-wider mb-3 relative z-10">Contexte Paléoenvironnemental</h3>
-                      
-                      <p className="text-sm text-slate-700 italic mb-4 relative z-10 leading-relaxed">
-                        "{data.paleogeography?.context || "Reconstitution en cours..."}"
-                      </p>
+                  <div className="relative rounded-xl overflow-hidden bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 p-4">
+                    <div className="absolute top-0 right-0 p-3 opacity-10">
+                      <svg className="w-24 h-24 text-blue-900" fill="currentColor" viewBox="0 0 24 24"><path d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    </div>
 
-                      <div className="grid grid-cols-1 gap-3 relative z-10">
-                        <div className="bg-white/60 backdrop-blur rounded-lg p-2.5 flex items-center gap-3">
-                          <div className="p-2 bg-blue-100 text-blue-600 rounded-md">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                          </div>
-                          <div>
-                            <div className="text-[10px] uppercase text-slate-400 font-bold">Environnement</div>
-                            <div className="text-sm font-semibold text-slate-800">{data.paleogeography?.environment || "N/A"}</div>
-                          </div>
+                    <h3 className="text-xs font-bold text-blue-800 uppercase tracking-wider mb-3 relative z-10">Contexte Paléoenvironnemental</h3>
+
+                    <p className="text-sm text-slate-700 italic mb-4 relative z-10 leading-relaxed">
+                      "{data.paleogeography?.context || "Reconstitution en cours..."}"
+                    </p>
+
+                    <div className="grid grid-cols-1 gap-3 relative z-10">
+                      <div className="bg-white/60 backdrop-blur rounded-lg p-2.5 flex items-center gap-3">
+                        <div className="p-2 bg-blue-100 text-blue-600 rounded-md">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                         </div>
-
-                        <div className="bg-white/60 backdrop-blur rounded-lg p-2.5 flex items-center gap-3">
-                          <div className="p-2 bg-amber-100 text-amber-600 rounded-md">
-                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-                          </div>
-                          <div>
-                            <div className="text-[10px] uppercase text-slate-400 font-bold">Climat</div>
-                            <div className="text-sm font-semibold text-slate-800">{data.paleogeography?.climate || "N/A"}</div>
-                          </div>
-                        </div>
-
-                        <div className="bg-white/60 backdrop-blur rounded-lg p-2.5 flex items-center gap-3">
-                          <div className="p-2 bg-indigo-100 text-indigo-600 rounded-md">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
-                          </div>
-                          <div>
-                            <div className="text-[10px] uppercase text-slate-400 font-bold">Niveau Marin</div>
-                            <div className="text-sm font-semibold text-slate-800">{data.paleogeography?.sea_level || "N/A"}</div>
-                          </div>
+                        <div>
+                          <div className="text-[10px] uppercase text-slate-400 font-bold">Environnement</div>
+                          <div className="text-sm font-semibold text-slate-800">{data.paleogeography?.environment || "N/A"}</div>
                         </div>
                       </div>
-                   </div>
+
+                      <div className="bg-white/60 backdrop-blur rounded-lg p-2.5 flex items-center gap-3">
+                        <div className="p-2 bg-amber-100 text-amber-600 rounded-md">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                        </div>
+                        <div>
+                          <div className="text-[10px] uppercase text-slate-400 font-bold">Climat</div>
+                          <div className="text-sm font-semibold text-slate-800">{data.paleogeography?.climate || "N/A"}</div>
+                        </div>
+                      </div>
+
+                      <div className="bg-white/60 backdrop-blur rounded-lg p-2.5 flex items-center gap-3">
+                        <div className="p-2 bg-indigo-100 text-indigo-600 rounded-md">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+                        </div>
+                        <div>
+                          <div className="text-[10px] uppercase text-slate-400 font-bold">Niveau Marin</div>
+                          <div className="text-sm font-semibold text-slate-800">{data.paleogeography?.sea_level || "N/A"}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -177,27 +228,27 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ status, data, error, onCl
               {activeTab === 'fossils' && (
                 <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300">
                   <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
-                     <div className="flex items-center gap-2 mb-4">
-                        <svg className="w-5 h-5 text-amber-700" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5-9c.83 0 1.5.67 1.5 1.5S7.83 14 7 14s-1.5-.67-1.5-1.5S6.17 11 7 11zm3-4c.83 0 1.5.67 1.5 1.5S10.83 10 10 10s-1.5-.67-1.5-1.5S9.17 7 10 7zm5 4c.83 0 1.5.67 1.5 1.5S15.83 14 15 14s-1.5-.67-1.5-1.5S14.17 11 15 11z" opacity="0.3"/><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm3.2 13.9a1 1 0 1 1-1.4 1.4l-2.1-2.1a3.9 3.9 0 0 1-5.4-5.4l1.1 1.1a2.4 2.4 0 1 0 3.3 3.3l2.1 2.1a1 1 0 0 1 2.4-.4z"/></svg>
-                        <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider">Fossiles Caractéristiques</h3>
-                     </div>
+                    <div className="flex items-center gap-2 mb-4">
+                      <svg className="w-5 h-5 text-amber-700" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5-9c.83 0 1.5.67 1.5 1.5S7.83 14 7 14s-1.5-.67-1.5-1.5S6.17 11 7 11zm3-4c.83 0 1.5.67 1.5 1.5S10.83 10 10 10s-1.5-.67-1.5-1.5S9.17 7 10 7zm5 4c.83 0 1.5.67 1.5 1.5S15.83 14 15 14s-1.5-.67-1.5-1.5S14.17 11 15 11z" opacity="0.3" /><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm3.2 13.9a1 1 0 1 1-1.4 1.4l-2.1-2.1a3.9 3.9 0 0 1-5.4-5.4l1.1 1.1a2.4 2.4 0 1 0 3.3 3.3l2.1 2.1a1 1 0 0 1 2.4-.4z" /></svg>
+                      <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider">Fossiles Caractéristiques</h3>
+                    </div>
 
-                     {data.fossils && data.fossils.length > 0 ? (
-                       <ul className="space-y-2">
-                         {data.fossils.map((fossil, idx) => (
-                           <li key={idx} className="flex items-center gap-3 bg-white p-3 rounded-lg shadow-sm border border-amber-100">
-                             <span className="w-6 h-6 flex items-center justify-center bg-amber-100 text-amber-600 rounded-full text-xs font-bold">
-                               {idx + 1}
-                             </span>
-                             <span className="text-sm text-slate-800 font-medium">{fossil}</span>
-                           </li>
-                         ))}
-                       </ul>
-                     ) : (
-                       <div className="text-center py-6">
-                         <p className="text-sm text-slate-500 italic">Aucun fossile majeur spécifiquement répertorié pour cette formation géologique précise.</p>
-                       </div>
-                     )}
+                    {data.fossils && data.fossils.length > 0 ? (
+                      <ul className="space-y-2">
+                        {data.fossils.map((fossil, idx) => (
+                          <li key={idx} className="flex items-center gap-3 bg-white p-3 rounded-lg shadow-sm border border-amber-100">
+                            <span className="w-6 h-6 flex items-center justify-center bg-amber-100 text-amber-600 rounded-full text-xs font-bold">
+                              {idx + 1}
+                            </span>
+                            <span className="text-sm text-slate-800 font-medium">{fossil}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <div className="text-center py-6">
+                        <p className="text-sm text-slate-500 italic">Aucun fossile majeur spécifiquement répertorié pour cette formation géologique précise.</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

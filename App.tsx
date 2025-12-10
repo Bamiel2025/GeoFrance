@@ -20,9 +20,11 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedCoords, setSelectedCoords] = useState<Coordinates | null>(null);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [currentWmsData, setCurrentWmsData] = useState<WMSData | null>(null);
 
   const handleLocationSelect = useCallback(async (coords: Coordinates, wmsData: WMSData | null) => {
     setSelectedCoords(coords);
+    setCurrentWmsData(wmsData); // Save for potential re-analysis
     setStatus(LoadingState.LOADING);
     setAnalysisData(null);
     setError(null);
@@ -39,6 +41,31 @@ const App: React.FC = () => {
       setStatus(LoadingState.ERROR);
     }
   }, []);
+
+  const handleManualCorrection = async (manualCode: string) => {
+    if (!selectedCoords) return;
+
+    setStatus(LoadingState.LOADING);
+    // Keep existing data to minimize flicker or just show loading
+    // setAnalysisData(null); 
+    setError(null);
+
+    try {
+      // Construct updated WMS data with the manual code
+      const updatedWmsData: WMSData = {
+        ...(currentWmsData || { rawResponse: '' }),
+        manualCode: manualCode
+      };
+
+      const data = await analyzeGeologyAtLocation(selectedCoords.lat, selectedCoords.lng, updatedWmsData);
+      setAnalysisData(data);
+      setStatus(LoadingState.SUCCESS);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "Une erreur est survenue lors de la correction.");
+      setStatus(LoadingState.ERROR);
+    }
+  };
 
   const closePanel = () => setIsPanelOpen(false);
 
@@ -72,6 +99,7 @@ const App: React.FC = () => {
           data={analysisData}
           error={error}
           onClose={closePanel}
+          onManualCorrection={handleManualCorrection}
         />
       </div>
     </div>
