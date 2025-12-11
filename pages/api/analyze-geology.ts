@@ -100,22 +100,40 @@ Response strictly in valid JSON:
 
     console.log("Calling Gemini API, code:", extractedCode || "none", "hasImage:", !!wmsData?.mapImageBase64);
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: parts
-    });
+    const modelName = "gemini-1.5-flash";
+    let attempts = 0;
+    const maxAttempts = 3;
+    let text: string | undefined;
 
-    let text = response.text;
-    console.log("Response length:", text?.length || 0);
+    while (attempts < maxAttempts) {
+      try {
+        attempts++;
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: parts
+        });
+        text = response.text;
+        if (text) break; // Success
+      } catch (err: any) {
+        console.warn(`Attempt ${attempts} failed: ${err.message}`);
+        if (attempts === maxAttempts) throw err; // Throw on last failure
+        // Simple backoff
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
+      }
+    }
 
     if (!text) {
-      // Try without image
+      // Try without image as last resort if image was the issue (unlikely for 503 but possible for 400s)
       console.log("Empty response, retrying without image...");
-      const retryResponse = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: prompt
-      });
-      text = retryResponse.text;
+      try {
+        const retryResponse = await ai.models.generateContent({
+          model: modelName,
+          contents: prompt
+        });
+        text = retryResponse.text;
+      } catch (err) {
+        console.error("Fallback text-only failed", err);
+      }
     }
 
     if (!text) {
