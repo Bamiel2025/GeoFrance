@@ -100,7 +100,7 @@ Response strictly in valid JSON:
 
     console.log("Calling Gemini API, code:", extractedCode || "none", "hasImage:", !!wmsData?.mapImageBase64);
 
-    const modelName = "gemini-1.5-flash-001";
+    const modelName = "gemini-2.5-flash";
     let attempts = 0;
     const maxAttempts = 3;
     let text: string | undefined;
