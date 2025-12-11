@@ -116,9 +116,22 @@ Response strictly in valid JSON:
         if (text) break; // Success
       } catch (err: any) {
         console.warn(`Attempt ${attempts} failed: ${err.message}`);
-        if (attempts === maxAttempts) throw err; // Throw on last failure
+
+        // Check for Quota Exceeded (429)
+        if (err.message && (err.message.includes('429') || err.message.includes('quota'))) {
+          console.error("Quota Exceeded for gemini-2.5-flash");
+          throw new Error("Le quota de l'API Gemini 2.5 Flash est dépassé (Limité à 5 requêtes/min). Veuillez attendre 20 secondes avant de réessayer.");
+        }
+
+        if (attempts === maxAttempts) {
+          // Return a user friendly message for 503 overload
+          if (err.message.includes('503') || err.message.includes('Overloaded')) {
+            throw new Error("Le modèle IA (Gemini 2.5) est actuellement surchargé. Veuillez réessayer dans quelques instants.");
+          }
+          throw err;
+        }
         // Simple backoff
-        await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
+        await new Promise(resolve => setTimeout(resolve, 2000 * attempts));
       }
     }
 
@@ -173,8 +186,9 @@ Response strictly in valid JSON:
 
   } catch (error: any) {
     console.error("Error:", error?.message || error);
+    // Send 500 but with clean error message for frontend
     res.status(500).json({
-      error: `Erreur d'analyse: ${error?.message || "Erreur inconnue"}`
+      error: error?.message || "Erreur inconnue lors de l'analyse"
     });
   }
 }
