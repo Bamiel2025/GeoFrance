@@ -204,9 +204,17 @@ const MapEvents: React.FC<{
   onLocationSelect: (coords: Coordinates, wmsData: WMSData | null) => void
 }> = ({ onLocationSelect }) => {
   const map = useMap();
+  const lastClickTime = React.useRef<number>(0);
 
   useMapEvents({
     async click(e) {
+      const now = Date.now();
+      if (now - lastClickTime.current < 1000) {
+        console.log("Blocking duplicate map click");
+        return;
+      }
+      lastClickTime.current = now;
+
       // 1. Set coords immediately
       const coords = { lat: e.latlng.lat, lng: e.latlng.lng };
 
