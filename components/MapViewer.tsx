@@ -213,14 +213,60 @@ const SearchControl = () => {
   );
 };
 
+// --- Analysis Trigger Control ---
+const AnalysisControl: React.FC<{
+  isActive: boolean;
+  onToggle: () => void;
+}> = ({ isActive, onToggle }) => {
+  return (
+    <div className="absolute top-4 right-4 z-[1000] flex flex-col gap-2">
+      <button
+        onClick={onToggle}
+        className={`p-3 rounded-full shadow-lg transition-all duration-200 flex items-center gap-2 ${isActive
+            ? 'bg-emerald-600 text-white ring-4 ring-emerald-200'
+            : 'bg-white text-slate-700 hover:bg-slate-50'
+          }`}
+        title={isActive ? "Désactiver le mode analyse" : "Activer l'analyse géologique"}
+      >
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+        </svg>
+        <span className={`text-sm font-bold ${isActive ? 'block' : 'hidden md:block'}`}>
+          {isActive ? 'Mode Analyse ACTIF' : 'Activer Analyse'}
+        </span>
+      </button>
+      {isActive && (
+        <div className="bg-emerald-600 text-white text-xs px-3 py-1 rounded-lg text-center shadow-lg animate-bounce">
+          Cliquez sur la carte !
+        </div>
+      )}
+    </div>
+  );
+};
+
 const MapEvents: React.FC<{
-  onLocationSelect: (coords: Coordinates, wmsData: WMSData | null) => void
-}> = ({ onLocationSelect }) => {
+  onLocationSelect: (coords: Coordinates, wmsData: WMSData | null) => void;
+  isAnalysisEnabled: boolean;
+  onDisableAnalysis: () => void;
+}> = ({ onLocationSelect, isAnalysisEnabled, onDisableAnalysis }) => {
   const map = useMap();
   const lastClickTime = React.useRef<number>(0);
 
+  // Update cursor based on mode
+  React.useEffect(() => {
+    if (isAnalysisEnabled) {
+      map.getContainer().style.cursor = 'crosshair';
+    } else {
+      map.getContainer().style.cursor = 'grab';
+    }
+  }, [isAnalysisEnabled, map]);
+
   useMapEvents({
     async click(e) {
+      // 1. Check if analysis is enabled
+      if (!isAnalysisEnabled) return;
+
       const now = Date.now();
       if (now - lastClickTime.current < 2000) {
         console.log("Blocking duplicate map click");
@@ -228,10 +274,10 @@ const MapEvents: React.FC<{
       }
       lastClickTime.current = now;
 
-      // 1. Set coords immediately
+      // 2. Set coords immediately
       const coords = { lat: e.latlng.lat, lng: e.latlng.lng };
 
-      // 2. Fetch data (WMS Info + Visual Tile)
+      // 3. Fetch data (WMS Info + Visual Tile)
       let wmsData: WMSData | null = null;
       try {
         wmsData = await fetchBrgmData(map, e.latlng);
@@ -240,6 +286,8 @@ const MapEvents: React.FC<{
       }
 
       onLocationSelect(coords, wmsData);
+
+      // Optional: Disable analysis after one click? No, let user do multiple.
     },
   });
   return null;
@@ -248,10 +296,15 @@ const MapEvents: React.FC<{
 const MapViewer: React.FC<MapViewerProps> = ({ onLocationSelect, selectedCoords }) => {
   // Default center of France
   const position: [number, number] = [46.603354, 1.888334];
+  const [isAnalysisEnabled, setIsAnalysisEnabled] = useState(false);
 
   return (
     <div className="h-full w-full relative z-0">
       <MapContainer center={position} zoom={6} scrollWheelZoom={true} className="h-full w-full">
+        <AnalysisControl
+          isActive={isAnalysisEnabled}
+          onToggle={() => setIsAnalysisEnabled(!isAnalysisEnabled)}
+        />
         <SearchControl />
 
         {/* Background Layer: OpenStreetMap for context */}
@@ -271,7 +324,11 @@ const MapViewer: React.FC<MapViewerProps> = ({ onLocationSelect, selectedCoords 
           attribution='&copy; <a href="http://www.brgm.fr/">BRGM</a>'
         />
 
-        <MapEvents onLocationSelect={onLocationSelect} />
+        <MapEvents
+          onLocationSelect={onLocationSelect}
+          isAnalysisEnabled={isAnalysisEnabled}
+          onDisableAnalysis={() => setIsAnalysisEnabled(false)}
+        />
 
         {selectedCoords && (
           <Marker position={[selectedCoords.lat, selectedCoords.lng]}>
@@ -286,7 +343,11 @@ const MapViewer: React.FC<MapViewerProps> = ({ onLocationSelect, selectedCoords 
       {/* Legend Overlay Hint */}
       <div className="absolute bottom-6 left-6 z-[1000] bg-white/90 p-3 rounded-lg shadow-md backdrop-blur-sm text-xs max-w-xs pointer-events-none">
         <p className="font-semibold text-slate-800 mb-1">Couche : BRGM 1/50 000</p>
-        <p className="text-slate-600">Double validation : Serveur WMS + Vision IA</p>
+        <p className="text-slate-600">
+          {isAnalysisEnabled
+            ? "🔵 MODE ANALYSE: Cliquez sur une formation !"
+            : "⚪ Mode Navigation: Activez l'analyse pour interroger."}
+        </p>
       </div>
     </div>
   );
