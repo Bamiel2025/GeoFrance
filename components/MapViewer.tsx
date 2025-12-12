@@ -157,7 +157,13 @@ const SearchControl = () => {
   };
 
   return (
-    <div className="absolute top-4 left-14 md:left-16 z-[1000] w-64 md:w-80 font-sans">
+    <div
+      className="absolute top-4 left-14 md:left-16 z-[1000] w-64 md:w-80 font-sans"
+      onClick={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()} // Prevent dragging
+      onTouchStart={(e) => e.stopPropagation()}
+    >
       <div className="relative group">
         <form onSubmit={handleSearch}>
           <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
