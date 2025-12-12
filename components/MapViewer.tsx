@@ -130,6 +130,15 @@ const SearchControl = () => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  // Prevent clicks from bubbling to the map (Leaflet specific)
+  React.useEffect(() => {
+    if (containerRef.current) {
+      L.DomEvent.disableClickPropagation(containerRef.current);
+      L.DomEvent.disableScrollPropagation(containerRef.current);
+    }
+  }, []);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -158,11 +167,8 @@ const SearchControl = () => {
 
   return (
     <div
+      ref={containerRef}
       className="absolute top-4 left-14 md:left-16 z-[1000] w-64 md:w-80 font-sans"
-      onClick={(e) => e.stopPropagation()}
-      onDoubleClick={(e) => e.stopPropagation()}
-      onMouseDown={(e) => e.stopPropagation()} // Prevent dragging
-      onTouchStart={(e) => e.stopPropagation()}
     >
       <div className="relative group">
         <form onSubmit={handleSearch}>
