@@ -79,7 +79,8 @@ const fetchBrgmData = async (map: L.Map, latlng: L.LatLng): Promise<WMSData | nu
 
     // --- 2. GetMap (The Visual Context - Force EPSG:3857) ---
     // We explicitly calculate Web Mercator bounds to match Leaflet's view
-    const delta = 0.005; // degree delta roughly
+    // Increase delta to 0.02 (~2km) to give the AI more context (town names, geological relationships)
+    const delta = 0.02;
     const p1 = latLngToWebMercator(latlng.lat - delta, latlng.lng - delta);
     const p2 = latLngToWebMercator(latlng.lat + delta, latlng.lng + delta);
     const mapBbox = `${p1.x},${p1.y},${p2.x},${p2.y}`;
@@ -209,7 +210,7 @@ const MapEvents: React.FC<{
   useMapEvents({
     async click(e) {
       const now = Date.now();
-      if (now - lastClickTime.current < 1000) {
+      if (now - lastClickTime.current < 2000) {
         console.log("Blocking duplicate map click");
         return;
       }
