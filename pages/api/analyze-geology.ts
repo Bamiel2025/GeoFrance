@@ -49,16 +49,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let instructions = "";
 
     if (manualCode) {
-      // CASE 1: User provided a manual code. This is the absolute truth.
-      wmsInfo = `USER_INPUT: The user has manually identified the code as "${manualCode}".`;
-      instructions = `1. TRUST THE USER INPUT "${manualCode}" 100%. \n2. Ignore any conflicting info from the database or image regarding the code identity.\n3. Output code "${manualCode}".\n4. Use your internal knowledge to provide the description for "${manualCode}".`;
+      // CASE 1: User provided a manual code. 
+      // Identity: TRUST MANUAL CODE. 
+      // Context: Use WMS + Image + Knowledge.
+      wmsInfo = `USER_INPUT: The user has manually identified the code as "${manualCode}".
+      DB_CONTEXT: The database at this location had "${extractedCode}" ("${extractedDescription}").`;
+
+      instructions = `1. IDENTITY: You MUST output code "${manualCode}".
+2. DESCRIPTION: Use the "${manualCode}" value combined with the DB_CONTEXT and the visual map to provide a rich geological description.
+3. CONTEXT: If the manual code "${manualCode}" implies a specific age or formation, use your internal knowledge to describe it, while CROSS-REFERENCING the visual details (e.g., adjacent layers) to explain the paleogeography.`;
     } else if (extractedCode) {
-      // CASE 2: WMS Hint available, but Visual Priority Rule applies.
+      // CASE 2: Visual Priority Rule.
+      // Identity: Map Image > WMS Hint.
+      // Context: Use inferred code + WMS Hint.
       wmsInfo = `DB_HINT: The database suggests code "${extractedCode}" (${extractedDescription}).
-WARNING: The database layer (GEO50K_HARM) is often spatially misaligned with the visual map (SCAN_D_GEOL50).
-You MUST inspect the image. The code printed on the map text (e.g. 'j9ad', 't2', 'n4') is the ONLY source of truth.
-If the text on the map is different from "${extractedCode}", IGNORE the database hint completely and analyze the map code.`;
-      instructions = `1. Read the code text directly under or near the blue marker pin on the image.\n2. If the text on the map (e.g., 'j9ad') contradicts the DB_HINT (e.g., 'e8b-9'), TRUST THE IMAGE.\n3. Output the code from the image.\n4. Provide the geological description for the *image code*.`;
+WARNING: The database layer (GEO50K_HARM) is often spatially misaligned.`;
+
+      instructions = `1. IDENTITY: Read the code text on the map image (e.g. 'j9ad', 't2'). 
+   - If the image code differs from "${extractedCode}", TRUST THE IMAGE.
+   - If the image is unclear, fall back to "${extractedCode}".
+2. DESCRIPTION: Describe the geological unit matching your identified code. Use the "${extractedDescription}" as a supporting hint for lithology if it aligns with the identified code.`;
     } else if (wmsData?.rawResponse) {
       // CASE 3: Only raw WMS text available
       wmsInfo = `DB_HINT: Database raw response: ${wmsData.rawResponse.substring(0, 500)}`;
