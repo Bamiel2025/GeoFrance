@@ -88,9 +88,11 @@ Visual Map: See attached image.
 
 INSTRUCTIONS:
 ${instructions}
+IMPORTANT: ALL YOUR ANSWERS AND DESCRIPTIONS MUST BE IN FRENCH. 
+RÉPONDEZ OBLIGATOIREMENT EN FRANÇAIS. Toutes les données récupérées ou générées (lithologie, paléogéographie, âge, formation, description, fossiles) doivent être rédigées et traduites en français.
 
 Response strictly in valid JSON:
-{"code":"[Exact code]","location_name":"commune","map_sheet":"feuille 1/50k","age":"stratigraphic age","formation":"formation name","lithology":"rock description","description":"detailed geological context","paleogeography":{"environment":"depositional environment","climate":"paleoclimate","sea_level":"sea level","context":"landscape description"},"fossils":["fossil1","fossil2"]}`;
+{"code":"[Exact code]","location_name":"commune","map_sheet":"feuille 1/50k","age":"stratigraphic age (en français)","formation":"formation name (en français)","lithology":"rock description (en français)","description":"detailed geological context (en français)","paleogeography":{"environment":"depositional environment (en français)","climate":"paleoclimate (en français)","sea_level":"sea level (en français)","context":"landscape description (en français)"},"fossils":["fossil1 (en français)","fossil2 (en français)"]}`;
 
     // Build content parts
     const parts: any[] = [];
