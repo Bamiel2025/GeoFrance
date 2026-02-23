@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GeologyAnalysis, LoadingState } from '../types';
 
 interface AnalysisPanelProps {
@@ -15,6 +15,77 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ status, data, error, onCl
   const [activeTab, setActiveTab] = useState<Tab>('strati');
   const [isEditing, setIsEditing] = useState(false);
   const [editCode, setEditCode] = useState('');
+
+  const [fossilImages, setFossilImages] = useState<Record<string, string | null>>({});
+  const [isLoadingFossil, setIsLoadingFossil] = useState<Record<string, boolean>>({});
+  const [paleoMapImage, setPaleoMapImage] = useState<string | null>(null);
+  const [isLoadingMap, setIsLoadingMap] = useState<boolean>(false);
+
+  const fetchWikiImage = async (query: string) => {
+    try {
+      const searchUrl = `https://fr.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&utf8=&format=json&origin=*`;
+      const searchRes = await fetch(searchUrl);
+      const searchData = await searchRes.json();
+
+      if (searchData.query?.search?.length > 0) {
+        const pageTitle = searchData.query.search[0].title;
+        const imgUrl = `https://fr.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(pageTitle)}&prop=pageimages&format=json&pithumbsize=500&origin=*`;
+        const imgRes = await fetch(imgUrl);
+        const imgData = await imgRes.json();
+
+        const pages = imgData.query.pages;
+        const firstPageId = Object.keys(pages)[0];
+        if (pages[firstPageId]?.thumbnail) {
+          return pages[firstPageId].thumbnail.source;
+        }
+      }
+      return null;
+    } catch (e) {
+      console.error("Wiki fetch error", e);
+      return null;
+    }
+  };
+
+  const handleFossilClick = async (fossil: string) => {
+    if (fossilImages[fossil] !== undefined) return;
+    setIsLoadingFossil(prev => ({ ...prev, [fossil]: true }));
+    const cleanName = fossil.split('(')[0].trim().split(' ')[0];
+    const imageUrl = await fetchWikiImage(cleanName);
+    setFossilImages(prev => ({ ...prev, [fossil]: imageUrl }));
+    setIsLoadingFossil(prev => ({ ...prev, [fossil]: false }));
+  };
+
+  useEffect(() => {
+    if (activeTab === 'paleo' && data?.age && paleoMapImage === null && !isLoadingMap) {
+      const fetchMap = async () => {
+        setIsLoadingMap(true);
+        try {
+          const baseAge = data.age.split('(')[0].trim();
+          const query = `paleogeography ${baseAge}`;
+          const searchUrl = `https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srnamespace=6&format=json&origin=*`;
+          const searchRes = await fetch(searchUrl);
+          const searchData = await searchRes.json();
+
+          if (searchData.query?.search?.length > 0) {
+            const fileTitle = searchData.query.search[0].title;
+            const imgUrl = `https://commons.wikimedia.org/w/api.php?action=query&titles=${encodeURIComponent(fileTitle)}&prop=imageinfo&iiprop=url&format=json&origin=*`;
+            const imgRes = await fetch(imgUrl);
+            const imgData = await imgRes.json();
+
+            const pages = imgData.query.pages;
+            const firstKey = Object.keys(pages)[0];
+            if (pages[firstKey]?.imageinfo?.length > 0) {
+              setPaleoMapImage(pages[firstKey].imageinfo[0].url);
+            }
+          }
+        } catch (e) {
+          console.error("Map fetch error", e);
+        }
+        setIsLoadingMap(false);
+      };
+      fetchMap();
+    }
+  }, [activeTab, data]);
 
   const handleEditSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -125,7 +196,10 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ status, data, error, onCl
                 </div>
               </div>
               <h1 className="text-xl font-bold text-slate-900 leading-tight mb-1">{data.formation}</h1>
-              <p className="text-sm font-medium text-emerald-600">{data.age}</p>
+              <p className="text-sm font-medium text-emerald-600">
+                {data.age}
+                {data.age_ma && <span className="ml-2 text-slate-500 font-normal">({data.age_ma})</span>}
+              </p>
             </div>
 
             {/* Navigation Tabs */}
@@ -189,6 +263,17 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ status, data, error, onCl
                       "{data.paleogeography?.context || "Reconstitution en cours..."}"
                     </p>
 
+                    {isLoadingMap ? (
+                      <div className="flex justify-center my-4 relative z-10">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                      </div>
+                    ) : paleoMapImage ? (
+                      <div className="mb-4 relative z-10 rounded-lg overflow-hidden border border-blue-200 shadow-sm bg-white">
+                        <img src={paleoMapImage} alt="Carte paléogéographique" className="w-full h-auto object-cover max-h-48" />
+                        <div className="absolute bottom-0 right-0 bg-white/80 backdrop-blur px-2 py-1 text-[9px] text-slate-600 rounded-tl-lg">Source: Wikimedia Commons</div>
+                      </div>
+                    ) : null}
+
                     <div className="grid grid-cols-1 gap-3 relative z-10">
                       <div className="bg-white/60 backdrop-blur rounded-lg p-2.5 flex items-center gap-3">
                         <div className="p-2 bg-blue-100 text-blue-600 rounded-md">
@@ -206,7 +291,10 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ status, data, error, onCl
                         </div>
                         <div>
                           <div className="text-[10px] uppercase text-slate-400 font-bold">Climat</div>
-                          <div className="text-sm font-semibold text-slate-800">{data.paleogeography?.climate || "N/A"}</div>
+                          <div className="text-sm font-semibold text-slate-800">
+                            {data.paleogeography?.climate || "N/A"}
+                            {data.paleogeography?.temperature && <span className="ml-1 text-amber-600 text-xs font-bold">({data.paleogeography.temperature})</span>}
+                          </div>
                         </div>
                       </div>
 
@@ -216,7 +304,10 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ status, data, error, onCl
                         </div>
                         <div>
                           <div className="text-[10px] uppercase text-slate-400 font-bold">Niveau Marin</div>
-                          <div className="text-sm font-semibold text-slate-800">{data.paleogeography?.sea_level || "N/A"}</div>
+                          <div className="text-sm font-semibold text-slate-800">
+                            {data.paleogeography?.sea_level || "N/A"}
+                            {data.paleogeography?.sea_level_m && <span className="ml-1 text-indigo-600 text-xs font-bold">({data.paleogeography.sea_level_m})</span>}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -236,11 +327,30 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ status, data, error, onCl
                     {data.fossils && data.fossils.length > 0 ? (
                       <ul className="space-y-2">
                         {data.fossils.map((fossil, idx) => (
-                          <li key={idx} className="flex items-center gap-3 bg-white p-3 rounded-lg shadow-sm border border-amber-100">
-                            <span className="w-6 h-6 flex items-center justify-center bg-amber-100 text-amber-600 rounded-full text-xs font-bold">
-                              {idx + 1}
-                            </span>
-                            <span className="text-sm text-slate-800 font-medium">{fossil}</span>
+                          <li key={idx} className="flex flex-col gap-2 bg-white p-3 rounded-lg shadow-sm border border-amber-100 transition-all">
+                            <div
+                              className="flex items-center gap-3 cursor-pointer group"
+                              onClick={() => handleFossilClick(fossil)}
+                              title="Cliquez pour chercher une image"
+                            >
+                              <span className="w-6 h-6 flex items-center justify-center bg-amber-100 text-amber-600 rounded-full text-xs font-bold group-hover:bg-amber-200 transition-colors">
+                                {isLoadingFossil[fossil] ? (
+                                  <div className="animate-spin h-3 w-3 border-2 border-amber-600 rounded-full border-t-transparent"></div>
+                                ) : (
+                                  idx + 1
+                                )}
+                              </span>
+                              <span className="text-sm text-slate-800 font-medium group-hover:text-amber-700 transition-colors">{fossil}</span>
+                            </div>
+
+                            {fossilImages[fossil] && (
+                              <div className="mt-2 rounded-md overflow-hidden bg-slate-50 border border-slate-100 flex justify-center p-1">
+                                <img src={fossilImages[fossil]!} alt={fossil} className="max-h-32 object-contain rounded" />
+                              </div>
+                            )}
+                            {fossilImages[fossil] === null && !isLoadingFossil[fossil] && (
+                              <div className="mt-1 text-[10px] text-slate-400 italic">Aucune image libre trouvée</div>
+                            )}
                           </li>
                         ))}
                       </ul>

@@ -3,6 +3,7 @@ export interface GeologyAnalysis {
   location_name: string; // Commune ou lieu-dit
   map_sheet: string;   // Feuille 1/50k (ex: n°123 Nom)
   age: string;
+  age_ma?: string;     // Nouveau champ
   lithology: string;
   formation: string;
   description: string;
@@ -11,7 +12,9 @@ export interface GeologyAnalysis {
   paleogeography: {
     environment: string; // Ex: Lagon tropical, Delta, Haute mer...
     climate: string;     // Ex: Tropical humide, Glaciaire...
+    temperature?: string; // Nouveau champ
     sea_level: string;   // Ex: Transgression marine (montée des eaux)
+    sea_level_m?: string; // Nouveau champ
     context: string;     // Description narrative courte
   };
 
