@@ -65,26 +65,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       wmsInfo = `DB_HINT: The database suggests code "${extractedCode}" (${extractedDescription}).
 WARNING: The database layer (GEO50K_HARM) is often spatially misaligned.`;
 
-      instructions = `1. IDENTITY: Read the code text on the map image (e.g. 'j9ad', 't2'). 
-   - If the image code differs from "${extractedCode}", TRUST THE IMAGE.
-   - If the image is unclear, fall back to "${extractedCode}".
-2. DESCRIPTION: Describe the geological unit matching your identified code. Use the "${extractedDescription}" as a supporting hint for lithology if it aligns with the identified code.`;
+      instructions = `1. IDENTITY: The user's exact point of interest is located directly in the DEAD CENTER of the provided image.
+   - Locate the exact center pixel of the image.
+   - Read the geological code written on the map for that central polygon (e.g., 'e5-4', 'Py', 'j9ad').
+   - DO NOT USE CODES FROM ADJACENT POLYGONS. Only use the code covering the exact center.
+   - If the visual code at the center is clearly visible and differs from "${extractedCode}", you MUST TRUST THE IMAGE.
+   - Only if the central area is completely unreadable should you fall back to "${extractedCode}".
+2. DESCRIPTION: Describe the geological unit matching your identified visual code. Use the "${extractedDescription}" only as a supporting hint if it logically aligns with your visual identification.`;
     } else if (wmsData?.rawResponse) {
       // CASE 3: Only raw WMS text available
       wmsInfo = `DB_HINT: Database raw response: ${wmsData.rawResponse.substring(0, 500)}`;
-      instructions = `1. Identify the code from the map image.\n2. Use the DB_HINT only if the image is unclear.\n3. Provide the description.`;
+      instructions = `1. Identify the code located strictly at the EXACT CENTER of the map image.\n2. Use the DB_HINT only if the center is unreadable.\n3. Provide the description for the central unit.`;
     } else {
       // CASE 4: No WMS info
-      instructions = `1. Identify the geological code strictly from the map image.\n2. Provide the description.`;
+      instructions = `1. Identify the geological code strictly covering the EXACT CENTER of the map image.\n2. Provide the description for that specific unit.`;
     }
 
     const prompt = `You are an expert geologist analysing a geological map of France (BRGM 1/50000).
-Your Goal: Identify the geological unit EXACTLY as written on the map image or provided by the user.
+Your Goal: Identify the geological unit EXACTLY as written on the map image at the specific point queried by the user.
 
 Context:
 Location: Lat ${lat.toFixed(4)}, Lng ${lng.toFixed(4)}
 ${wmsInfo}
-Visual Map: See attached image.
+Visual Map: See attached image. The location the user clicked is exactly at the CENTER of the image.
 
 INSTRUCTIONS:
 ${instructions}
