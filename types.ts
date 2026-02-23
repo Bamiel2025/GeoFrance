@@ -20,7 +20,10 @@ export interface GeologyAnalysis {
   };
 
   // Nouveaux Fossiles
-  fossils: string[];     // Liste des fossiles caractéristiques
+  fossils: {
+    name: string;             // Nom d'affichage
+    scientific_query: string; // Nom latin strict du genre pour recherche API (ex: Perisphinctes)
+  }[];
 
   coords: {
     lat: number;

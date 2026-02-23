@@ -134,7 +134,7 @@ IMPORTANT: ALL YOUR ANSWERS AND DESCRIPTIONS MUST BE IN FRENCH.
 RÉPONDEZ OBLIGATOIREMENT EN FRANÇAIS. Toutes les données récupérées ou générées (lithologie, paléogéographie, âge, formation, description, fossiles) doivent être rédigées et traduites en français.
 
 Response strictly in valid JSON:
-{"code":"[Exact code]","location_name":"commune","map_sheet":"feuille 1/50k","age":"stratigraphic age (en français)","age_ma":"âge estimé en millions d'années (ex: ~150 Ma)","formation":"formation name (en français)","lithology":"rock description (en français)","description":"detailed geological context (en français)","paleogeography":{"environment":"depositional environment (en français)","climate":"paleoclimate (en français)","temperature":"température moyenne estimée (ex: 25°C)","sea_level":"sea level (en français)","sea_level_m":"niveau marin par rapport à l'actuel (ex: +50m)","context":"landscape description (en français)","period_en":"Major geological period in English (ex: Jurassic, Cretaceous, Triassic - VERY IMPORTANT for map search)"},"fossils":["nom du fossile 1 (en français)","nom du fossile 2 (en français)"]}`;
+{"code":"[Exact code]","location_name":"commune","map_sheet":"feuille 1/50k","age":"stratigraphic age (en français)","age_ma":"âge estimé en millions d'années (ex: ~150 Ma)","formation":"formation name (en français)","lithology":"rock description (en français)","description":"detailed geological context (en français)","paleogeography":{"environment":"depositional environment (en français)","climate":"paleoclimate (en français)","temperature":"température moyenne estimée (ex: 25°C)","sea_level":"sea level (en français)","sea_level_m":"niveau marin par rapport à l'actuel (ex: +50m)","context":"landscape description (en français)","period_en":"Major geological period in English (ex: Jurassic, Cretaceous, Triassic - VERY IMPORTANT for map search)"},"fossils":[{"name":"Nom combiné pédagogique et latin (ex: Ammonite (Perisphinctes))","scientific_query":"STRICT NOM LATIN UNIQUE du genre sans espace (ex: Perisphinctes)"}]}`;
 
     // Build content parts
     const parts: any[] = [];
@@ -208,7 +208,7 @@ Response strictly in valid JSON:
     }
 
     // Clean response
-    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    text = text.replace(/```json\n?/g, '').replace(/```/g, '').trim();
     const firstBrace = text.indexOf('{');
     const lastBrace = text.lastIndexOf('}');
     if (firstBrace !== -1 && lastBrace !== -1) {

@@ -47,13 +47,16 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ status, data, error, onCl
     }
   };
 
-  const handleFossilClick = async (fossil: string) => {
-    if (fossilImages[fossil] !== undefined) return;
-    setIsLoadingFossil(prev => ({ ...prev, [fossil]: true }));
-    const cleanName = fossil.split('(')[0].trim().split(' ')[0];
-    const imageUrl = await fetchWikiImage(cleanName);
-    setFossilImages(prev => ({ ...prev, [fossil]: imageUrl }));
-    setIsLoadingFossil(prev => ({ ...prev, [fossil]: false }));
+  const handleFossilClick = async (fossilInput: any) => {
+    const isObj = typeof fossilInput === 'object' && fossilInput !== null;
+    const fossilName = isObj ? fossilInput.name : fossilInput;
+    const fetchQuery = isObj ? fossilInput.scientific_query : fossilInput.split('(')[0].trim().split(' ')[0];
+
+    if (fossilImages[fossilName] !== undefined) return;
+    setIsLoadingFossil(prev => ({ ...prev, [fossilName]: true }));
+    const imageUrl = await fetchWikiImage(fetchQuery);
+    setFossilImages(prev => ({ ...prev, [fossilName]: imageUrl }));
+    setIsLoadingFossil(prev => ({ ...prev, [fossilName]: false }));
   };
 
   useEffect(() => {
@@ -344,43 +347,64 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ status, data, error, onCl
 
                     {data.fossils && data.fossils.length > 0 ? (
                       <ul className="space-y-2">
-                        {data.fossils.map((fossil, idx) => (
-                          <li key={idx} className="flex flex-col gap-2 bg-white p-3 rounded-lg shadow-sm border border-amber-100 transition-all">
-                            <div
-                              className="flex items-center gap-3 cursor-pointer group"
-                              onClick={() => handleFossilClick(fossil)}
-                              title="Cliquez pour chercher une image"
-                            >
-                              <span className="w-6 h-6 flex items-center justify-center bg-amber-100 text-amber-600 rounded-full text-xs font-bold group-hover:bg-amber-200 transition-colors">
-                                {isLoadingFossil[fossil] ? (
-                                  <div className="animate-spin h-3 w-3 border-2 border-amber-600 rounded-full border-t-transparent"></div>
-                                ) : (
-                                  idx + 1
-                                )}
-                              </span>
-                              <span className="text-sm text-slate-800 font-medium group-hover:text-amber-700 transition-colors">{fossil}</span>
-                            </div>
+                        {data.fossils.map((fossil: any, idx) => {
+                          const isObj = typeof fossil === 'object' && fossil !== null;
+                          const fossilName = isObj ? fossil.name : fossil;
 
-                            {fossilImages[fossil] && (
+                          return (
+                            <li key={idx} className="flex flex-col gap-2 bg-white p-3 rounded-lg shadow-sm border border-amber-100 transition-all">
                               <div
-                                className="mt-2 rounded-md overflow-hidden bg-slate-50 border border-slate-100 flex justify-center p-1 cursor-zoom-in relative group"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setZoomedImage(fossilImages[fossil]);
-                                }}
-                                title="Cliquez pour agrandir"
+                                className="flex items-center gap-3 cursor-pointer group"
+                                onClick={() => handleFossilClick(fossil)}
+                                title="Cliquez pour chercher une image"
                               >
-                                <img src={fossilImages[fossil]!} alt={fossil} className="max-h-32 object-contain rounded group-hover:opacity-90 transition-opacity" />
-                                <div className="absolute top-1 right-1 bg-black/40 p-1 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" /></svg>
-                                </div>
+                                <span className="w-6 h-6 flex items-center justify-center bg-amber-100 text-amber-600 rounded-full text-xs font-bold group-hover:bg-amber-200 transition-colors">
+                                  {isLoadingFossil[fossilName] ? (
+                                    <div className="animate-spin h-3 w-3 border-2 border-amber-600 rounded-full border-t-transparent"></div>
+                                  ) : (
+                                    idx + 1
+                                  )}
+                                </span>
+                                <span className="text-sm text-slate-800 font-medium group-hover:text-amber-700 transition-colors">{fossilName}</span>
                               </div>
-                            )}
-                            {fossilImages[fossil] === null && !isLoadingFossil[fossil] && (
-                              <div className="mt-1 text-[10px] text-slate-400 italic">Aucune image libre trouvée</div>
-                            )}
-                          </li>
-                        ))}
+
+                              {fossilImages[fossilName] && (
+                                <div className="relative mt-2 hover:z-20">
+                                  <div
+                                    className="rounded-md overflow-hidden bg-slate-50 border border-slate-100 flex justify-center p-1 cursor-zoom-in relative group"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setZoomedImage(fossilImages[fossilName]);
+                                    }}
+                                    title="Cliquez pour agrandir"
+                                  >
+                                    <img src={fossilImages[fossilName]!} alt={fossilName} className="max-h-32 object-contain rounded group-hover:opacity-90 transition-opacity" />
+                                    <div className="absolute top-1 right-1 bg-black/40 p-1 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" /></svg>
+                                    </div>
+                                  </div>
+                                  <button
+                                    className="absolute -top-3 -right-3 bg-white hover:bg-slate-100 text-slate-400 hover:text-red-500 rounded-full p-1.5 shadow-md border border-slate-200 transition-colors z-30"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setFossilImages(prev => {
+                                        const next = { ...prev };
+                                        delete next[fossilName];
+                                        return next;
+                                      });
+                                    }}
+                                    title="Fermer l'image"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                  </button>
+                                </div>
+                              )}
+                              {fossilImages[fossilName] === null && !isLoadingFossil[fossilName] && (
+                                <div className="mt-1 text-[10px] text-slate-400 italic">Aucune image libre trouvée</div>
+                              )}
+                            </li>
+                          )
+                        })}
                       </ul>
                     ) : (
                       <div className="text-center py-6">
