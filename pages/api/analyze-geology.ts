@@ -79,16 +79,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 3. CONTEXT: If the manual code "${manualCode}" implies a specific age or formation, use your internal knowledge to describe it, while CROSS-REFERENCING the visual details (e.g., adjacent layers) to explain the paleogeography.`;
     } else if (extractedCode) {
       // CASE 2: BRGM DB Priority Rule.
-      wmsInfo = `DB_REFERENCE: The vector database polygon at this coordinate returned code "${extractedCode}" (${extractedDescription}). (Warning: Vector polygons can be misaligned or contain typos compared to the scanned map).`;
+      wmsInfo = `DB_EXACT_REFERENCE: The BRGM database identifies the exact polygon as code "${extractedCode}" (${extractedDescription}).`;
 
       instructions = `1. IDENTITY (CRUCIAL):
-   - Look EXACTLY under and immediately adjacent to the blue pin on the map image.
-   - If there is a CLEARLY legible geological code (e.g., 'e5-4', 'j9d') visibly associated with the polygon under the pin, YOU MUST OUTPUT THIS VISUAL CODE as the absolute truth, even if it contradicts the DB_REFERENCE ('es4' or 'j8d').
-   - IF AND ONLY IF the code under the pin is obscured, unreadable, or missing, fallback to using the DB_REFERENCE code: "${extractedCode}".
-   - DANGER: Do NOT read massive labels from far-away adjacent polygons. Only read what's under the pin.
+   - YOU MUST ABSOLUTELY TRUST THE DB_EXACT_REFERENCE. The geological code is exactly "${extractedCode}".
+   - DO NOT ATTEMPT TO READ A DIFFERENT CODE FROM THE IMAGE. The map image is an outdated scan with frequent local notations (e.g., 'e5-4') that have been modernized and harmonized in the database (e.g., 'es4' = Oligocène). Your visual reading can also hallucinate completely wrong codes (like reading 'n3' instead of 'c6b'). The DB vector code "${extractedCode}" is the absolute ground truth.
 2. DESCRIPTION & STRATIGRAPHY:
-   - If you OUTPUT the exact DB code "${extractedCode}", then base your precise age and lithology description on the DB description: "${extractedDescription}".
-   - IF YOU CORRECTED THE CODE using your visual reading (e.g., you chose 'e5-4' instead of the DB's 'es4'), YOU MUST COMPLETELY IGNORE "${extractedDescription}". It belongs to the wrong polygon. Instead, query your own internal expert knowledge of French stratigraphy to provide the age, Ma, and lithology for your visual code (e.g. e5-4 = Eocène moyen/Bartonien-Lutétien).
+   - Use the code "${extractedCode}" and base your precise geological age and lithology description strictly on the DB description: "${extractedDescription}".
    - WARNING ON PREFIXES (BRGM Lexicon):
      - 'c' (lowercase) = Crétacé (ex: c6b is Maastrichtien, NOT Carbonifère)
      - 'j' = Jurassique
