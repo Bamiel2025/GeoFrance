@@ -23,22 +23,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let extractedCode = "";
     let extractedDescription = "";
 
+    // Validation helper to reject useless/error BRGM layer responses
+    const isInvalidBrgm = (text: string) => {
+      if (!text) return true;
+      const lower = text.toLowerCase();
+      return lower.includes("layernotdefined") ||
+        lower.includes("non défini") ||
+        lower.includes("sans géométrie") ||
+        lower.includes("inconnu");
+    };
+
     if (wmsData && wmsData.rawResponse) {
-      try {
-        const jsonData = JSON.parse(wmsData.rawResponse);
-        if (jsonData.features && jsonData.features.length > 0) {
-          const props = jsonData.features[0].properties;
-          extractedCode = props.NOTATION || props.CODE || props.notation || props.code || "";
-          extractedDescription = props.DESCR || props.DESCRIPTION || props.descr || "";
-          console.log("Extracted from vector layer:", { extractedCode, extractedDescription });
+      if (isInvalidBrgm(wmsData.rawResponse)) {
+        console.log("BRGM returned invalid data (e.g. LayerNotDefined). Falling back to visual analysis.");
+        wmsData.rawResponse = ""; // Clear to force visual fallback (CASE 4)
+      } else {
+        try {
+          const jsonData = JSON.parse(wmsData.rawResponse);
+          if (jsonData.features && jsonData.features.length > 0) {
+            const props = jsonData.features[0].properties;
+            let tempCode = props.NOTATION || props.CODE || props.notation || props.code || "";
+            let tempDesc = props.DESCR || props.DESCRIPTION || props.descr || "";
+
+            if (tempCode && !isInvalidBrgm(tempCode)) extractedCode = tempCode;
+            if (tempDesc && !isInvalidBrgm(tempDesc)) extractedDescription = tempDesc;
+
+            console.log("Extracted from vector layer:", { extractedCode, extractedDescription });
+          }
+        } catch (e) {
+          // Not JSON, try text parsing
+          const notationMatch = wmsData.rawResponse.match(/NOTATION[:\s=]+['"]?([A-Za-z0-9\-_]+)/i);
+          const codeMatch = wmsData.rawResponse.match(/CODE[:\s=]+['"]?([A-Za-z0-9\-_]+)/i);
+          if (notationMatch && !isInvalidBrgm(notationMatch[1])) extractedCode = notationMatch[1];
+          else if (codeMatch && !isInvalidBrgm(codeMatch[1])) extractedCode = codeMatch[1];
+          console.log("Extracted from text:", { extractedCode });
         }
-      } catch (e) {
-        // Not JSON, try text parsing
-        const notationMatch = wmsData.rawResponse.match(/NOTATION[:\s=]+['"]?([A-Za-z0-9\-_]+)/i);
-        const codeMatch = wmsData.rawResponse.match(/CODE[:\s=]+['"]?([A-Za-z0-9\-_]+)/i);
-        if (notationMatch) extractedCode = notationMatch[1];
-        else if (codeMatch) extractedCode = codeMatch[1];
-        console.log("Extracted from text:", { extractedCode });
       }
     }
 
