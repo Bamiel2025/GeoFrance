@@ -100,16 +100,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
      - 'or' = Ordovicien
      - 'k' = Cambrien
    - Apply strict scientific rigor to determine the exact age and millions of years (Ma).
-3. CONTEXT: The provided image is solely for you to deduce the paleogeography (environment, sea level, topography) and understand surrounding faults or neighboring units.`;
+3. PALEOGEOGRAPHY: The provided image is solely for you to deduce the paleogeography (environment, sea level, topography) and understand surrounding faults.
+4. FOSSILS (CRUCIAL): You must query your internal knowledge of the specific **BRGM geological map notice** (Notice explicative de la carte géologique 1/50000) for this exact location and formation.
+   - Extract the EXACT fossil genera or species characteristic of this layer according to the official BRGM text (e.g., specific ammonites, rudistes, foraminifera, nummulites).
+   - NEVER use generic terms like 'mollusques', 'dinosaures', or 'bivalves' alone. Give high scientific precision.`;
     } else if (wmsData?.rawResponse) {
       // CASE 3: Only raw WMS text available
       wmsInfo = `DB_HINT: Database raw response: ${wmsData.rawResponse.substring(0, 500)}`;
       instructions = `1. Identify the exact code using the DB_HINT text first. Only if the DB_HINT is totally empty or unreadable should you guess from the exact center of the map image.
-2. Provide the scientific description matching the DB_HINT.`;
+2. Provide the scientific description matching the DB_HINT.
+3. For Fossils, base your response on the official BRGM notice for this exact unit, providing precise species/genera, avoiding generic terms.`;
     } else {
       // CASE 4: No WMS info
       instructions = `1. Identify the geological code strictly from the EXACT CENTER of the map image. Be careful with lower case (c = Crétacé) vs upper case.
-2. Provide the description for that specific unit.`;
+2. Provide the scientific description for that specific unit based on BRGM standards.
+3. For Fossils, base your response on the official BRGM notice for this region and unit, providing precise species/genera, avoiding generic terms.`;
     }
 
     const prompt = `You are an expert geologist analysing a geological map of France (BRGM 1/50000).
