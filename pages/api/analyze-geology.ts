@@ -79,15 +79,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 3. CONTEXT: If the manual code "${manualCode}" implies a specific age or formation, use your internal knowledge to describe it, while CROSS-REFERENCING the visual details (e.g., adjacent layers) to explain the paleogeography.`;
     } else if (extractedCode) {
       // CASE 2: BRGM DB Priority Rule.
-      // Identity: WMS Hint > Map Image.
-      // The harmonised vector database (GEO50K_HARM) is scientifically superior to the scanned image.
-      wmsInfo = `DB_EXACT_REFERENCE: The BRGM database identifies the exact polygon as code "${extractedCode}" (${extractedDescription}).`;
+      wmsInfo = `DB_REFERENCE: The vector database polygon at this coordinate returned code "${extractedCode}" (${extractedDescription}). (Warning: Vector polygons can be misaligned or contain typos compared to the scanned map).`;
 
-      instructions = `1. IDENTITY: The BRGM database exact polygon code is "${extractedCode}".
-   - Look EXACTLY at the center of the image (the blue pin).
-   - If you CLEARLY read a visual code at the exact center (e.g. 'j9d') that is very similar but slightly different from the DB code ('j8d'), YOU MUST TRUST YOUR VISUAL READING and output the visual code. Database vector shapes can have slight topological errors compared to the scanned map.
-   - However, if the visual code is unreadable under the pin, or if the code you read belongs to a massive adjacent layer completely different from the DB code (e.g. reading a huge 'C7' nearby instead of the DB's '${extractedCode}'), YOU MUST TRUST THE DATABASE CODE: "${extractedCode}".
-2. DESCRIPTION & STRATIGRAPHY: Base your description and precise age strictly on "${extractedDescription}", but adapt it if you corrected the code visually.
+      instructions = `1. IDENTITY (CRUCIAL):
+   - Look EXACTLY under and immediately adjacent to the blue pin on the map image.
+   - If there is a CLEARLY legible geological code (e.g., 'e5-4', 'j9d') visibly associated with the polygon under the pin, YOU MUST OUTPUT THIS VISUAL CODE as the absolute truth, even if it contradicts the DB_REFERENCE ('es4' or 'j8d').
+   - IF AND ONLY IF the code under the pin is obscured, unreadable, or missing, fallback to using the DB_REFERENCE code: "${extractedCode}".
+   - DANGER: Do NOT read massive labels from far-away adjacent polygons. Only read what's under the pin.
+2. DESCRIPTION & STRATIGRAPHY:
+   - If you OUTPUT the exact DB code "${extractedCode}", then base your precise age and lithology description on the DB description: "${extractedDescription}".
+   - IF YOU CORRECTED THE CODE using your visual reading (e.g., you chose 'e5-4' instead of the DB's 'es4'), YOU MUST COMPLETELY IGNORE "${extractedDescription}". It belongs to the wrong polygon. Instead, query your own internal expert knowledge of French stratigraphy to provide the age, Ma, and lithology for your visual code (e.g. e5-4 = Eocène moyen/Bartonien-Lutétien).
    - WARNING ON PREFIXES (BRGM Lexicon):
      - 'c' (lowercase) = Crétacé (ex: c6b is Maastrichtien, NOT Carbonifère)
      - 'j' = Jurassique
@@ -104,7 +105,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
      - 'k' = Cambrien
    - Apply strict scientific rigor to determine the exact age and millions of years (Ma).
 3. PALEOGEOGRAPHY: The provided image is solely for you to deduce the paleogeography (environment, sea level, topography) and understand surrounding faults.
-4. FOSSILS (CRUCIAL): You must query your internal knowledge of the specific **BRGM geological map notice** (Notice explicative de la carte géologique 1/50000) for this exact location and formation.
+4. FOSSILS (CRUCIAL): You must query your internal knowledge of the specific **BRGM geological map notice** (Notice explicative de la carte géologique 1/50000) for this exact location and formation (the one you definitively chose).
    - Extract the EXACT fossil genera or species characteristic of this layer according to the official BRGM text (e.g., specific ammonites, rudistes, foraminifera, nummulites).
    - NEVER use generic terms like 'mollusques', 'dinosaures', or 'bivalves' alone. Give high scientific precision.`;
     } else if (wmsData?.rawResponse) {
