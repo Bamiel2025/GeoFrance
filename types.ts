@@ -16,6 +16,7 @@ export interface GeologyAnalysis {
     sea_level: string;   // Ex: Transgression marine (montée des eaux)
     sea_level_m?: string; // Nouveau champ
     context: string;     // Description narrative courte
+    period_en?: string;  // Nouveau champ (e.g. 'Jurassic', 'Cretaceous')
   };
 
   // Nouveaux Fossiles

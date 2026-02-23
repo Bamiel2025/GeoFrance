@@ -83,8 +83,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // The harmonised vector database (GEO50K_HARM) is scientifically superior to the scanned image.
       wmsInfo = `DB_EXACT_REFERENCE: The BRGM database identifies the exact polygon as code "${extractedCode}" (${extractedDescription}).`;
 
-      instructions = `1. IDENTITY: YOU MUST TRUST THE DB_EXACT_REFERENCE. The geological code is exactly "${extractedCode}". Do not try to read a different code from the image. 
-2. DESCRIPTION & STRATIGRAPHY: Use the code "${extractedCode}" and base your geological age and lithology on "${extractedDescription}".
+      instructions = `1. IDENTITY: The BRGM database exact polygon code is "${extractedCode}".
+   - Look EXACTLY at the center of the image (the blue pin).
+   - If you CLEARLY read a visual code at the exact center (e.g. 'j9d') that is very similar but slightly different from the DB code ('j8d'), YOU MUST TRUST YOUR VISUAL READING and output the visual code. Database vector shapes can have slight topological errors compared to the scanned map.
+   - However, if the visual code is unreadable under the pin, or if the code you read belongs to a massive adjacent layer completely different from the DB code (e.g. reading a huge 'C7' nearby instead of the DB's '${extractedCode}'), YOU MUST TRUST THE DATABASE CODE: "${extractedCode}".
+2. DESCRIPTION & STRATIGRAPHY: Base your description and precise age strictly on "${extractedDescription}", but adapt it if you corrected the code visually.
    - WARNING ON PREFIXES (BRGM Lexicon):
      - 'c' (lowercase) = Crétacé (ex: c6b is Maastrichtien, NOT Carbonifère)
      - 'j' = Jurassique
@@ -131,7 +134,7 @@ IMPORTANT: ALL YOUR ANSWERS AND DESCRIPTIONS MUST BE IN FRENCH.
 RÉPONDEZ OBLIGATOIREMENT EN FRANÇAIS. Toutes les données récupérées ou générées (lithologie, paléogéographie, âge, formation, description, fossiles) doivent être rédigées et traduites en français.
 
 Response strictly in valid JSON:
-{"code":"[Exact code]","location_name":"commune","map_sheet":"feuille 1/50k","age":"stratigraphic age (en français)","age_ma":"âge estimé en millions d'années (ex: ~150 Ma)","formation":"formation name (en français)","lithology":"rock description (en français)","description":"detailed geological context (en français)","paleogeography":{"environment":"depositional environment (en français)","climate":"paleoclimate (en français)","temperature":"température moyenne estimée (ex: 25°C)","sea_level":"sea level (en français)","sea_level_m":"niveau marin par rapport à l'actuel (ex: +50m)","context":"landscape description (en français)"},"fossils":["nom du fossile 1 (en français)","nom du fossile 2 (en français)"]}`;
+{"code":"[Exact code]","location_name":"commune","map_sheet":"feuille 1/50k","age":"stratigraphic age (en français)","age_ma":"âge estimé en millions d'années (ex: ~150 Ma)","formation":"formation name (en français)","lithology":"rock description (en français)","description":"detailed geological context (en français)","paleogeography":{"environment":"depositional environment (en français)","climate":"paleoclimate (en français)","temperature":"température moyenne estimée (ex: 25°C)","sea_level":"sea level (en français)","sea_level_m":"niveau marin par rapport à l'actuel (ex: +50m)","context":"landscape description (en français)","period_en":"Major geological period in English (ex: Jurassic, Cretaceous, Triassic - VERY IMPORTANT for map search)"},"fossils":["nom du fossile 1 (en français)","nom du fossile 2 (en français)"]}`;
 
     // Build content parts
     const parts: any[] = [];

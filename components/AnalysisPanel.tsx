@@ -15,6 +15,7 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ status, data, error, onCl
   const [activeTab, setActiveTab] = useState<Tab>('strati');
   const [isEditing, setIsEditing] = useState(false);
   const [editCode, setEditCode] = useState('');
+  const [zoomedImage, setZoomedImage] = useState<string | null>(null);
 
   const [fossilImages, setFossilImages] = useState<Record<string, string | null>>({});
   const [isLoadingFossil, setIsLoadingFossil] = useState<Record<string, boolean>>({});
@@ -61,7 +62,13 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ status, data, error, onCl
         setIsLoadingMap(true);
         try {
           const baseAge = data.age.split('(')[0].trim();
-          const query = `paleogeography ${baseAge}`;
+          const periodQuery = data.paleogeography?.period_en || '';
+
+          // Enhanced query prioritizing English period names + Europe for optimal hits
+          const query = periodQuery
+            ? `paleogeography ${periodQuery} Europe`
+            : `paleogeography ${baseAge}`;
+
           const searchUrl = `https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srnamespace=6&format=json&origin=*`;
           const searchRes = await fetch(searchUrl);
           const searchData = await searchRes.json();
@@ -268,11 +275,22 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ status, data, error, onCl
                         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
                       </div>
                     ) : paleoMapImage ? (
-                      <div className="mb-4 relative z-10 rounded-lg overflow-hidden border border-blue-200 shadow-sm bg-white">
-                        <img src={paleoMapImage} alt="Carte paléogéographique" className="w-full h-auto object-cover max-h-48" />
+                      <div
+                        className="mb-4 relative z-10 rounded-lg overflow-hidden border border-blue-200 shadow-sm bg-white cursor-zoom-in group"
+                        onClick={() => setZoomedImage(paleoMapImage)}
+                        title="Cliquez pour agrandir la carte"
+                      >
+                        <img src={paleoMapImage} alt="Carte paléogéographique" className="w-full h-auto object-cover max-h-48 group-hover:opacity-90 transition-opacity" />
+                        <div className="absolute top-2 right-2 bg-black/50 p-1 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" /></svg>
+                        </div>
                         <div className="absolute bottom-0 right-0 bg-white/80 backdrop-blur px-2 py-1 text-[9px] text-slate-600 rounded-tl-lg">Source: Wikimedia Commons</div>
                       </div>
-                    ) : null}
+                    ) : (
+                      <div className="mb-4 relative z-10 bg-blue-50/50 rounded-lg p-3 text-center border border-blue-100/50">
+                        <p className="text-xs text-blue-400 italic">Carte paléogéographique indisponible pour cette ère précise.</p>
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-1 gap-3 relative z-10">
                       <div className="bg-white/60 backdrop-blur rounded-lg p-2.5 flex items-center gap-3">
@@ -344,8 +362,18 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ status, data, error, onCl
                             </div>
 
                             {fossilImages[fossil] && (
-                              <div className="mt-2 rounded-md overflow-hidden bg-slate-50 border border-slate-100 flex justify-center p-1">
-                                <img src={fossilImages[fossil]!} alt={fossil} className="max-h-32 object-contain rounded" />
+                              <div
+                                className="mt-2 rounded-md overflow-hidden bg-slate-50 border border-slate-100 flex justify-center p-1 cursor-zoom-in relative group"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setZoomedImage(fossilImages[fossil]);
+                                }}
+                                title="Cliquez pour agrandir"
+                              >
+                                <img src={fossilImages[fossil]!} alt={fossil} className="max-h-32 object-contain rounded group-hover:opacity-90 transition-opacity" />
+                                <div className="absolute top-1 right-1 bg-black/40 p-1 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" /></svg>
+                                </div>
                               </div>
                             )}
                             {fossilImages[fossil] === null && !isLoadingFossil[fossil] && (
@@ -383,6 +411,36 @@ const AnalysisPanel: React.FC<AnalysisPanelProps> = ({ status, data, error, onCl
           </div>
         )}
       </div>
+
+      {/* Image Zoom Modal Overlay - Moved outside the main scroll area but inside AnalysisPanel */}
+      {zoomedImage && (
+        <div
+          className="fixed inset-0 z-[3000] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 cursor-zoom-out animate-in fade-in duration-200"
+          onClick={() => setZoomedImage(null)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh] w-full h-full flex flex-col items-center justify-center">
+            {/* Close Button above the image */}
+            <div className="absolute top-4 right-4 md:top-8 md:right-8">
+              <button
+                className="bg-white/10 hover:bg-white/20 text-white rounded-full p-2 backdrop-blur transition-all"
+                title="Fermer l'image"
+              >
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            {/* The Image */}
+            <img
+              src={zoomedImage}
+              alt="Zoom"
+              className="max-w-full max-h-full object-contain rounded-lg shadow-2xl ring-1 ring-white/10"
+              onClick={(e) => e.stopPropagation()} // Prevent closing if they strictly click the image, though cursor is zoom-out so they might expect it to close. Actually let's just close on any click.
+            />
+            {/* Source credit */}
+            <div className="mt-4 text-white/50 text-sm">Image tirée de Wikipedia / Wikimedia Commons</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
