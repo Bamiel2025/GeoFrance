@@ -81,11 +81,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // CASE 2: BRGM DB Priority Rule.
       wmsInfo = `DB_EXACT_REFERENCE: The BRGM database identifies the exact polygon as code "${extractedCode}" (${extractedDescription}).`;
 
-      instructions = `1. IDENTITY (CRUCIAL):
-   - YOU MUST ABSOLUTELY TRUST THE DB_EXACT_REFERENCE. The geological code is exactly "${extractedCode}".
-   - DO NOT ATTEMPT TO READ A DIFFERENT CODE FROM THE IMAGE. The map image is an outdated scan with frequent local notations (e.g., 'e5-4') that have been modernized and harmonized in the database (e.g., 'es4' = Oligocène). Your visual reading can also hallucinate completely wrong codes (like reading 'n3' instead of 'c6b'). The DB vector code "${extractedCode}" is the absolute ground truth.
+      instructions = `1. IDENTITY (CRUCIAL) & COLOR TRIANGULATION:
+   - YOU MUST ABSOLUTELY TRUST THE DB_EXACT_REFERENCE as your baseline. The geological code is exactly "${extractedCode}".
+   - DO NOT ATTEMPT TO BLINDLY READ A DIFFERENT CODE FROM THE IMAGE. Your visual reading can hallucinate completely wrong codes (like reading 'n3' instead of 'c6b', or 'n5' instead of 'C7').
+   - EXCEPTION (TRIANGULATION): The map image is an outdated scan with frequent local notations and the DB can have vector misalignments. You may ONLY override the DB_EXACT_REFERENCE if you find a MASSIVE contradiction between the DB and BOTH the visually read text AND the polygon's standard chronostratigraphic color under the blue pin.
+     * Quaternaire: Blanc/Gris très clair
+     * Néogène (Miocène/Pliocène): Jaune
+     * Paléogène (Paléocène/Eocène/Oligocène): Orange / Brun clair / Jaune foncé
+     * Crétacé: Vert (du clair au foncé)
+     * Jurassique: Bleu (du clair au foncé)
+     * Trias: Rose / Violet
+     * Carbonifère/Permien: Gris foncés / Marrons
+   - Example 1: DB says 'es4' (Oligocène -> should be Orange). Pin is on a clearly Orange polygon labelled 'e5-4' (Eocène). The triangulation holds (Paleogene = Orange). Overriding DB with 'e5-4' is PERMITTED and ENCOURAGED.
+   - Example 2: DB says 'c6b' (Crétacé -> Green). Pin is on a Green polygon, but you read 'n3' or 'n5'. This is a HALLUCINATION. 'c6b' is also Green. Do NOT override the DB.
+   - If you override the DB, YOU MUST COMPLETELY IGNORE "${extractedDescription}". It belongs to the wrong polygon. Instead, query your own internal expert knowledge of French stratigraphy to provide the age, Ma, and lithology for your visual code (e.g. e5-4 = Eocène moyen/Bartonien-Lutétien).
 2. DESCRIPTION & STRATIGRAPHY:
-   - Use the code "${extractedCode}" and base your precise geological age and lithology description strictly on the DB description: "${extractedDescription}".
+   - If you use the DB code "${extractedCode}", base your precise geological age and lithology description strictly on the DB description: "${extractedDescription}".
    - WARNING ON PREFIXES (BRGM Lexicon):
      - 'c' (lowercase) = Crétacé (ex: c6b is Maastrichtien, NOT Carbonifère)
      - 'j' = Jurassique
