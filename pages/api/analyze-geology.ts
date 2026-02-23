@@ -59,35 +59,47 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 2. DESCRIPTION: Use the "${manualCode}" value combined with the DB_CONTEXT and the visual map to provide a rich geological description.
 3. CONTEXT: If the manual code "${manualCode}" implies a specific age or formation, use your internal knowledge to describe it, while CROSS-REFERENCING the visual details (e.g., adjacent layers) to explain the paleogeography.`;
     } else if (extractedCode) {
-      // CASE 2: Visual Priority Rule.
-      // Identity: Map Image > WMS Hint.
-      // Context: Use inferred code + WMS Hint.
-      wmsInfo = `DB_HINT: The database suggests code "${extractedCode}" (${extractedDescription}).
-WARNING: The database layer (GEO50K_HARM) is often spatially misaligned.`;
+      // CASE 2: BRGM DB Priority Rule.
+      // Identity: WMS Hint > Map Image.
+      // The harmonised vector database (GEO50K_HARM) is scientifically superior to the scanned image.
+      wmsInfo = `DB_EXACT_REFERENCE: The BRGM database identifies the exact polygon as code "${extractedCode}" (${extractedDescription}).`;
 
-      instructions = `1. IDENTITY: The user's exact point of interest is located directly in the DEAD CENTER of the provided image.
-   - Locate the exact center pixel of the image.
-   - Read the geological code written on the map for that central polygon (e.g., 'e5-4', 'Py', 'j9ad').
-   - DO NOT USE CODES FROM ADJACENT POLYGONS. Only use the code covering the exact center.
-   - If the visual code at the center is clearly visible and differs from "${extractedCode}", you MUST TRUST THE IMAGE.
-   - Only if the central area is completely unreadable should you fall back to "${extractedCode}".
-2. DESCRIPTION: Describe the geological unit matching your identified visual code. Use the "${extractedDescription}" only as a supporting hint if it logically aligns with your visual identification.`;
+      instructions = `1. IDENTITY: YOU MUST TRUST THE DB_EXACT_REFERENCE. The geological code is exactly "${extractedCode}". Do not try to read a different code from the image. 
+2. DESCRIPTION & STRATIGRAPHY: Use the code "${extractedCode}" and base your geological age and lithology on "${extractedDescription}".
+   - WARNING ON PREFIXES (BRGM Lexicon):
+     - 'c' (lowercase) = Crétacé (ex: c6b is Maastrichtien, NOT Carbonifère)
+     - 'j' = Jurassique
+     - 't' = Trias
+     - 'e' = Eocène
+     - 'g' = Oligocène
+     - 'm' = Miocène
+     - 'p' = Pliocène
+     - 'q' = Quaternaire
+     - 'h' = Carbonifère (Houiller)
+     - 'd' = Dévonien
+     - 's' = Silurien
+     - 'or' = Ordovicien
+     - 'k' = Cambrien
+   - Apply strict scientific rigor to determine the exact age and millions of years (Ma).
+3. CONTEXT: The provided image is solely for you to deduce the paleogeography (environment, sea level, topography) and understand surrounding faults or neighboring units.`;
     } else if (wmsData?.rawResponse) {
       // CASE 3: Only raw WMS text available
       wmsInfo = `DB_HINT: Database raw response: ${wmsData.rawResponse.substring(0, 500)}`;
-      instructions = `1. Identify the code located strictly at the EXACT CENTER of the map image.\n2. Use the DB_HINT only if the center is unreadable.\n3. Provide the description for the central unit.`;
+      instructions = `1. Identify the exact code using the DB_HINT text first. Only if the DB_HINT is totally empty or unreadable should you guess from the exact center of the map image.
+2. Provide the scientific description matching the DB_HINT.`;
     } else {
       // CASE 4: No WMS info
-      instructions = `1. Identify the geological code strictly covering the EXACT CENTER of the map image.\n2. Provide the description for that specific unit.`;
+      instructions = `1. Identify the geological code strictly from the EXACT CENTER of the map image. Be careful with lower case (c = Crétacé) vs upper case.
+2. Provide the description for that specific unit.`;
     }
 
     const prompt = `You are an expert geologist analysing a geological map of France (BRGM 1/50000).
-Your Goal: Identify the geological unit EXACTLY as written on the map image at the specific point queried by the user.
+Your Goal: Identify the geological unit EXACTLY as provided by the database query or the user.
 
 Context:
 Location: Lat ${lat.toFixed(4)}, Lng ${lng.toFixed(4)}
 ${wmsInfo}
-Visual Map: See attached image. The location the user clicked is exactly at the CENTER of the image.
+Visual Map: See attached image for spatial context (faults, neighbors, geography).
 
 INSTRUCTIONS:
 ${instructions}
