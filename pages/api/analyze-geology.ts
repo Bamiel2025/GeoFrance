@@ -98,7 +98,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 2. DESCRIPTION & STRATIGRAPHY:
    - If you use the DB code "${extractedCode}", base your precise geological age and lithology description strictly on the DB description: "${extractedDescription}".
    - WARNING ON PREFIXES (BRGM Lexicon):
-     - 'c' (lowercase) = Crétacé (ex: c6b is Maastrichtien, NOT Carbonifère)
+     - 'c' (lowercase) = Crétacé. RÈGLES DE CHRONOSTRATIGRAPHIE STRICTES POUR LE SUD DE LA FRANCE (PROVENCE) :
+       - c7 = Danien (Paléocène basal, souvent calcaire blanc)
+       - c6b = Maastrichtien (ex: Calcaires de Rognac / Bégudien) - NE PAS CONFONDRE AVEC LE SANTONIEN.
+       - c6a = Campanien (ex: Valdo-Fuvélien)
+       - c5 = Santonien
+       - c4 = Coniacien
+       - c3 = Turonien
+       - c2 = Cénomanien
      - 'j' = Jurassique
      - 't' = Trias
      - 'e' = Eocène
