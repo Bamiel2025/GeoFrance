@@ -17,6 +17,86 @@ interface MapViewerProps {
 }
 
 // Helper to convert blob to base64
+
+// Helper to draw a bold target crosshair marker at center of WMS map image
+const addTargetMarkerToImage = (blob: Blob): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(blob);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width || 512;
+      canvas.height = img.height || 512;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        blobToBase64(blob).then(resolve).catch(reject);
+        return;
+      }
+
+      // 1. Draw original WMS map image
+      ctx.drawImage(img, 0, 0);
+
+      // 2. Draw Target Marker at Center (256, 256)
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+      ctx.shadowBlur = 6;
+
+      // Red outer circle
+      ctx.beginPath();
+      ctx.arc(cx, cy, 28, 0, 2 * Math.PI);
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+
+      // Inner white ring for contrast
+      ctx.beginPath();
+      ctx.arc(cx, cy, 26, 0, 2 * Math.PI);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // Center crosshair (+)
+      ctx.beginPath();
+      ctx.moveTo(cx - 35, cy);
+      ctx.lineTo(cx + 35, cy);
+      ctx.moveTo(cx, cy - 35);
+      ctx.lineTo(cx, cy + 35);
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      // Center point dot
+      ctx.beginPath();
+      ctx.arc(cx, cy, 4, 0, 2 * Math.PI);
+      ctx.fillStyle = '#ef4444';
+      ctx.fill();
+
+      // Target Badge Label
+      ctx.fillStyle = '#ef4444';
+      ctx.fillRect(cx - 55, cy - 52, 110, 18);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('TARGET HERE', cx, cy - 39);
+
+      ctx.restore();
+
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+      const base64 = dataUrl.split(',')[1];
+      resolve(base64);
+    };
+    img.onerror = (err) => {
+      URL.revokeObjectURL(url);
+      reject(err);
+    };
+    img.src = url;
+  });
+};
+
 const blobToBase64 = (blob: Blob): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -80,10 +160,9 @@ const fetchBrgmData = async (map: L.Map, latlng: L.LatLng): Promise<WMSData | nu
       console.log("WMS Vector Response:", vectorData);
     }
 
-    // --- 2. GetMap (The Visual Context - Force EPSG:3857) ---
-    // We explicitly calculate Web Mercator bounds to match Leaflet's view
-    // Increase delta to 0.02 (~2km) to give the AI more context (town names, geological relationships)
-    const delta = 0.02;
+    // --- 2. GetMap (The Visual Context with target zoom & marker) ---
+    // Reduce delta to 0.006 (~600m radius) so labels like n4u, n2, j3, c6b are sharp, large and un-crowded
+    const delta = 0.006;
     const p1 = latLngToWebMercator(latlng.lat - delta, latlng.lng - delta);
     const p2 = latLngToWebMercator(latlng.lat + delta, latlng.lng + delta);
     const mapBbox = `${p1.x},${p1.y},${p2.x},${p2.y}`;
@@ -91,7 +170,7 @@ const fetchBrgmData = async (map: L.Map, latlng: L.LatLng): Promise<WMSData | nu
     const mapParams: Record<string, string> = {
       request: 'GetMap',
       service: 'WMS',
-      srs: 'EPSG:3857', // Use Web Mercator to match visual tiles
+      srs: 'EPSG:3857',
       styles: '',
       version: '1.1.1',
       format: 'image/jpeg',
@@ -108,9 +187,9 @@ const fetchBrgmData = async (map: L.Map, latlng: L.LatLng): Promise<WMSData | nu
 
     if (mapResponse.ok) {
       const blob = await mapResponse.blob();
-      // Verify usage of blob
-      if (blob.size > 2000) { // arbitrary threshold to filter out tiny XML errors
-        mapImageBase64 = await blobToBase64(blob);
+      if (blob.size > 2000) {
+        // Draw bright red crosshair target marker directly at (256, 256)
+        mapImageBase64 = await addTargetMarkerToImage(blob);
       } else {
         console.warn("WMS Image too small, likely error or blank:", blob.size);
       }

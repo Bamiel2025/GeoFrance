@@ -82,22 +82,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 - Regional Lithology (1/1 000 000 BRGM): ${extractedDescription || 'Inconnue'} (Code litho: ${extractedCode || 'N/A'})
 - Raw BRGM Response: ${wmsData?.rawResponse ? wmsData.rawResponse.substring(0, 500) : 'None'}`;
 
-      instructions = `1. DÉTERMINATION DU CODE GÉOLOGIQUE ET DE LA FORMATION (CRUCIAL):
-   - Vous êtes sur la carte géologique 1/50 000 BRGM ("${extractedMapSheet || 'France'}").
-   - Identifiez le code/notation de la formation géologique sous le curseur au centre de l'image (ex: 'c6b', 'c5', 'e5', 'm2', 'j3', 'g1', 'Fy-z', 'R', 'n3', etc.).
-   - Utilisez vos connaissances approfondies des cartes géologiques 1/50 000 BRGM pour valider le code avec les couleurs chronostratigraphiques (Vert=Crétacé, Bleu=Jurassique, Jaune=Miocène/Pliocène, Orange/Marron=Eocène/Oligocène, Blanc/Gris=Quaternaire).
+      instructions = `1. RECONNAISSANCE DU CODE ET NOTATION GÉOLOGIQUE (PRÉCISION MAXIMALE CRUCIALE) :
+   - UN MARQUEUR ROUGE BRILLANT "TARGET HERE" AVEC UN VISEUR EN CROIX (+) ET UN CERCLE EST DESSINÉ AU CENTRE DE L'IMAGE (256, 256).
+   - Le point d'analyse cliqué par l'utilisateur se situe EXACTEMENT au centre du viseur (+).
+   - Lisez attentivement la notation/code de la formation géologique imprimée SOUS ou À PROXIMITÉ IMMÉDIATE du viseur central.
+   - ATTENTION AUX CONFUSIONS CLASSIQUES DE L'OCR ET DE LA LECTURE :
+     * Distinguez 'n4u' de 'n1', 'n2', 'n3' ou 'n4'. Si la notation comporte une lettre finale en indice (comme le 'u' de 'n4u'), incluez TOUJOURS la lettre complète : "n4u" (Néocomien / Hauterivien - Valanginien).
+     * Distinguez 'n2' de 'l6', 'j6' ou 'n1'.
+     * Distinguez les préfixes : 'c' = Crétacé, 'n' = Néocomien/Crétacé inférieur, 'j' = Jurassique, 'l' = Lias/Jurassique inf., 'e' = Eocène, 'g' = Oligocène, 'm' = Miocène, 'p' = Pliocène, 'q' / 'F' = Quaternaire/Alluvions.
+     * Conservez la notation exacte avec ses indices/exposants (ex: n4u, c6b, c5, e5-4, j3a, Fy-z, R).
 
-2. STRATIGRAPHIE ET LITHOLOGIE EXPLICATIVE:
-   - Fournissez l'âge stratigraphique exact (ex: Maastrichtien, Santonien, Bartonien, Cénomanien, etc.) et l'âge estimé en millions d'années (ex: ~70 Ma).
-   - Rédigez une description lithologique détaillée de la formation telle que définie dans la notice explicative officielle BRGM de la feuille "${extractedMapSheet || 'carte 1/50 000'}".
+2. VERIFICATION CHRONOSTRATIGRAPHIQUE PAR LA COULEUR DU POLYGONE :
+   - Vérifiez la couleur du polygone géologique directement sous le viseur :
+     * Quaternaire / Alluvions (F, Fy, Fz, q) -> Blanc / Gris très clair
+     * Néocomien / Crétacé inférieur (n, n1, n2, n4, n4u, c1-2) -> Vert olive clair / Vert pistache
+     * Crétacé supérieur (c3, c4, c5, c6a, c6b, c7) -> Vert moyen à vert foncé
+     * Tertiaire / Eocène / Miocène (e, g, m, p) -> Orange, marron, jaune
+     * Jurassique (j, j1, j2, j3, l) -> Bleu clair à bleu foncé
+   - Ne lisez PAS une étiquette située à plusieurs centimètres du viseur central.
 
-3. PALÉOGÉOGRAPHIE ET RECONSTITUTION:
-   - Décrivez l'environnement de dépôt (marin, lacustre, d'eau douce, etc.), le climat, le niveau marin et le paysage à l'époque.
-   - Indiquez le nom de la période majeure en anglais dans 'period_en' (ex: 'Cretaceous', 'Jurassic', 'Eocene', 'Triassic', 'Neogene') pour permettre la recherche d'une carte paléogéographique.
+3. DESCRIPTION EXPLICATIVE ET STRATIGRAPHIE :
+   - Fournissez l'âge stratigraphique exact (ex: Valanginien supérieur à Hauterivien pour n4u ; Hauterivien pour n2) et l'estimation en Ma (~135 Ma).
+   - Rédigez le nom de la formation et une description lithologique détaillée conforme à la notice explicative BRGM de la feuille "${extractedMapSheet || '1/50 000'}".
 
-4. FOSSILES CARACTÉRISTIQUES (NOTICE BRGM):
-   - Citez les fossiles caractéristiques répertoriés dans la notice BRGM pour cette formation précise et cette feuille géologique (genres/espèces d'ammonites, rudistes, foraminifères, etc.).
-   - Fournissez le nom scientifique du genre en nom simple dans 'scientific_query' (ex: 'Perisphinctes', 'Hippurites', 'Nummulites', 'Tetragonites') sans espaces pour permettre l'affichage de l'image Wikipedia.`;
+4. FOSSILES ET PALÉOGÉOGRAPHIE (NOTICE BRGM) :
+   - Référez-vous aux fossiles caractéristiques répertoriés dans la notice officielle BRGM de la feuille "${extractedMapSheet || '1/50 000'}".
+   - Fournissez le nom du genre latin unique sans espace dans 'scientific_query' (ex: 'Crioceratites', 'Neritropis', 'Perisphinctes', 'Hippurites') pour l'affichage de l'image Wikipedia.`;
     }
 
     const prompt = `You are an expert geologist analyzing a 1/50 000 BRGM geological map of France.
@@ -114,13 +124,13 @@ RÉPONDEZ OBLIGATOIREMENT EN FRANÇAIS.
 
 Respond strictly in valid JSON:
 {
-  "code": "[Exact geological code notation, e.g. c6b, e5, m2, Fy-z]",
+  "code": "[Exact geological code notation, e.g. n4u, n2, c6b, e5, m2, Fy-z]",
   "confidence": "[0-100]%",
   "verification_reason": "Explication courte de la validation du code",
   "location_name": "Nom de la commune ou localité",
   "map_sheet": "${extractedMapSheet || 'Nom de la feuille 1/50k'}",
-  "age": "Âge stratigraphique (en français, ex: Maastrichtien (Crétacé supérieur))",
-  "age_ma": "Âge estimé en Ma (ex: ~70 Ma)",
+  "age": "Âge stratigraphique (en français, ex: Valanginien-Hauterivien (Crétacé inférieur))",
+  "age_ma": "Âge estimé en Ma (ex: ~135 Ma)",
   "formation": "Nom de la formation géologique (en français)",
   "lithology": "Description des roches (en français)",
   "description": "Explication géologique complète (en français)",
@@ -135,8 +145,8 @@ Respond strictly in valid JSON:
   },
   "fossils": [
     {
-      "name": "Nom pédagogique et latin (ex: Ammonite (Perisphinctes))",
-      "scientific_query": "Nom du genre latin sans espace (ex: Perisphinctes)"
+      "name": "Nom pédagogique et latin (ex: Ammonite (Crioceratites))",
+      "scientific_query": "Nom du genre latin sans espace (ex: Crioceratites)"
     }
   ]
 }`;
