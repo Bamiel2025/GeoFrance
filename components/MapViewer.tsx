@@ -46,8 +46,11 @@ const fetchBrgmData = async (map: L.Map, latlng: L.LatLng): Promise<WMSData | nu
     const size = map.getSize();
     const bounds = map.getBounds();
 
-    // --- 1. GetFeatureInfo (Keep 4326 for feature info as it works for text) ---
-    // Use GEO50K_HARM which is the harmonized vector geological layer
+    // --- 1. GetFeatureInfo ---
+    // Query LITHO_1M_SIMPLIFIEE (lithology) and SCAN_F_GEOL50_CATALOG (50k map sheet name & number)
+    const gfiDelta = 0.005;
+    const gfiBbox = `${latlng.lng - gfiDelta},${latlng.lat - gfiDelta},${latlng.lng + gfiDelta},${latlng.lat + gfiDelta}`;
+
     const vectorParams: Record<string, string> = {
       request: 'GetFeatureInfo',
       service: 'WMS',
@@ -55,16 +58,16 @@ const fetchBrgmData = async (map: L.Map, latlng: L.LatLng): Promise<WMSData | nu
       styles: '',
       transparent: 'true',
       version: '1.1.1',
-      format: 'image/png', // Format of the map image being queried (virtual)
-      bbox: bounds.toBBoxString(),
-      height: size.y.toString(),
-      width: size.x.toString(),
-      layers: 'GEO50K_HARM',
-      query_layers: 'GEO50K_HARM',
-      info_format: 'application/json',
-      x: Math.round(point.x).toString(),
-      y: Math.round(point.y).toString(),
-      feature_count: '1'
+      format: 'image/png',
+      bbox: gfiBbox,
+      height: '256',
+      width: '256',
+      layers: 'LITHO_1M_SIMPLIFIEE,SCAN_F_GEOL50_CATALOG',
+      query_layers: 'LITHO_1M_SIMPLIFIEE,SCAN_F_GEOL50_CATALOG',
+      info_format: 'application/vnd.ogc.gml',
+      x: '128',
+      y: '128',
+      feature_count: '5'
     };
 
     const vectorUrl = 'https://geoservices.brgm.fr/geologie?' + new URLSearchParams(vectorParams).toString();

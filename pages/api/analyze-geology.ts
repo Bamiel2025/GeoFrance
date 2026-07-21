@@ -19,143 +19,130 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const ai = new GoogleGenAI({ apiKey });
 
-    // Parse WMS response for direct code extraction
+    // Parse WMS response (XML / GML / JSON / Text)
     let extractedCode = "";
     let extractedDescription = "";
-
-    // Validation helper to reject useless/error BRGM layer responses
-    const isInvalidBrgm = (text: string) => {
-      if (!text) return true;
-      const lower = text.toLowerCase();
-      return lower.includes("layernotdefined") ||
-        lower.includes("non défini") ||
-        lower.includes("sans géométrie") ||
-        lower.includes("inconnu");
-    };
+    let extractedMapSheet = "";
 
     if (wmsData && wmsData.rawResponse) {
-      if (isInvalidBrgm(wmsData.rawResponse)) {
-        console.log("BRGM returned invalid data (e.g. LayerNotDefined). Falling back to visual analysis.");
-        wmsData.rawResponse = ""; // Clear to force visual fallback (CASE 4)
-      } else {
+      const raw = wmsData.rawResponse;
+
+      // Extract GML fields: DESCR, TYPE, CODE_GEOL, numero, nom
+      const descrMatch = raw.match(/<DESCR>([^<]+)<\/DESCR>/i);
+      const typeMatch = raw.match(/<TYPE>([^<]+)<\/TYPE>/i);
+      const codeGeolMatch = raw.match(/<CODE_GEOL>([^<]+)<\/CODE_GEOL>/i);
+      const sheetNumMatch = raw.match(/<numero>([^<]+)<\/numero>/i);
+      const sheetNameMatch = raw.match(/<nom>([^<]+)<\/nom>/i);
+
+      if (descrMatch) {
+        extractedDescription = descrMatch[1].trim();
+        if (typeMatch) extractedDescription += ` (${typeMatch[1].trim()})`;
+      }
+      if (codeGeolMatch) extractedCode = codeGeolMatch[1].trim();
+
+      if (sheetNumMatch && sheetNameMatch) {
+        extractedMapSheet = `Feuille 1/50 000 n°${sheetNumMatch[1].trim()} (${sheetNameMatch[1].trim()})`;
+      } else if (sheetNameMatch) {
+        extractedMapSheet = `Feuille 1/50 000 : ${sheetNameMatch[1].trim()}`;
+      }
+
+      // JSON Fallback
+      if (!extractedCode && raw.includes('{')) {
         try {
-          const jsonData = JSON.parse(wmsData.rawResponse);
+          const jsonData = JSON.parse(raw);
           if (jsonData.features && jsonData.features.length > 0) {
             const props = jsonData.features[0].properties;
-            let tempCode = props.NOTATION || props.CODE || props.notation || props.code || "";
-            let tempDesc = props.DESCR || props.DESCRIPTION || props.descr || "";
-
-            if (tempCode && !isInvalidBrgm(tempCode)) extractedCode = tempCode;
-            if (tempDesc && !isInvalidBrgm(tempDesc)) extractedDescription = tempDesc;
-
-            console.log("Extracted from vector layer:", { extractedCode, extractedDescription });
+            extractedCode = props.NOTATION || props.CODE || props.CODE_GEOL || "";
+            extractedDescription = props.DESCR || props.DESCRIPTION || "";
           }
         } catch (e) {
-          // Not JSON, try text parsing
-          const notationMatch = wmsData.rawResponse.match(/NOTATION[:\s=]+['"]?([A-Za-z0-9\-_]+)/i);
-          const codeMatch = wmsData.rawResponse.match(/CODE[:\s=]+['"]?([A-Za-z0-9\-_]+)/i);
-          if (notationMatch && !isInvalidBrgm(notationMatch[1])) extractedCode = notationMatch[1];
-          else if (codeMatch && !isInvalidBrgm(codeMatch[1])) extractedCode = codeMatch[1];
-          console.log("Extracted from text:", { extractedCode });
+          // Ignore
         }
       }
+
+      console.log("Extracted BRGM metadata:", { extractedCode, extractedDescription, extractedMapSheet });
     }
 
     const manualCode = wmsData?.manualCode;
 
-    // Build prompt based on available inputs
+    // Build prompt
     let wmsInfo = "";
     let instructions = "";
 
     if (manualCode) {
-      // CASE 1: User provided a manual code. 
-      // Identity: TRUST MANUAL CODE. 
-      // Context: Use WMS + Image + Knowledge.
-      wmsInfo = `USER_INPUT: The user has manually identified the code as "${manualCode}".
-      DB_CONTEXT: The database at this location had "${extractedCode}" ("${extractedDescription}").`;
+      wmsInfo = `USER_OVERRIDE_CODE: The user explicitly specified the geological formation code as "${manualCode}".
+      MAP_SHEET_CONTEXT: ${extractedMapSheet || 'Unknown'}
+      LITHOLOGY_CONTEXT: ${extractedDescription || 'Unknown'}`;
 
-      instructions = `1. IDENTITY: You MUST output code "${manualCode}".
-2. DESCRIPTION: Use the "${manualCode}" value combined with the DB_CONTEXT and the visual map to provide a rich geological description.
-3. CONTEXT: If the manual code "${manualCode}" implies a specific age or formation, use your internal knowledge to describe it, while CROSS-REFERENCING the visual details (e.g., adjacent layers) to explain the paleogeography.`;
-    } else if (extractedCode) {
-      // CASE 2: BRGM DB Priority Rule.
-      wmsInfo = `DB_EXACT_REFERENCE: The BRGM database identifies the exact polygon as code "${extractedCode}" (${extractedDescription}).`;
-
-      instructions = `1. IDENTITY (CRUCIAL) & COLOR TRIANGULATION:
-   - YOU MUST ABSOLUTELY TRUST THE DB_EXACT_REFERENCE as your baseline. The geological code is exactly "${extractedCode}".
-   - DO NOT ATTEMPT TO BLINDLY READ A DIFFERENT CODE FROM THE IMAGE. Your visual reading can hallucinate completely wrong codes (like reading 'n3' instead of 'c6b', or 'n5' instead of 'C7').
-   - EXCEPTION (TRIANGULATION): The map image is an outdated scan with frequent local notations and the DB can have vector misalignments. You may ONLY override the DB_EXACT_REFERENCE if you find a MASSIVE contradiction between the DB and BOTH the visually read text AND the polygon's standard chronostratigraphic color under the blue pin.
-     * Quaternaire: Blanc/Gris très clair
-     * Néogène (Miocène/Pliocène): Jaune
-     * Paléogène (Paléocène/Eocène/Oligocène): Orange / Brun clair / Jaune foncé
-     * Crétacé: Vert (du clair au foncé)
-     * Jurassique: Bleu (du clair au foncé)
-     * Trias: Rose / Violet
-     * Carbonifère/Permien: Gris foncés / Marrons
-   - Example 1: DB says 'es4' (Oligocène -> should be Orange). Pin is on a clearly Orange polygon labelled 'e5-4' (Eocène). The triangulation holds (Paleogene = Orange). Overriding DB with 'e5-4' is PERMITTED and ENCOURAGED.
-   - Example 2: DB says 'c6b' (Crétacé -> Green). Pin is on a Green polygon, but you read 'n3' or 'n5'. This is a HALLUCINATION. 'c6b' is also Green. Do NOT override the DB.
-   - If you override the DB, YOU MUST COMPLETELY IGNORE "${extractedDescription}". It belongs to the wrong polygon. Instead, query your own internal expert knowledge of French stratigraphy to provide the age, Ma, and lithology for your visual code (e.g. e5-4 = Eocène moyen/Bartonien-Lutétien).
-2. DESCRIPTION & STRATIGRAPHY:
-   - If you use the DB code "${extractedCode}", base your precise geological age and lithology description strictly on the DB description: "${extractedDescription}".
-   - WARNING ON PREFIXES (BRGM Lexicon):
-     - 'c' (lowercase) = Crétacé. RÈGLES DE CHRONOSTRATIGRAPHIE STRICTES POUR LE SUD DE LA FRANCE (PROVENCE) :
-       - c7 = Danien (Paléocène basal, souvent calcaire blanc)
-       - c6b = Maastrichtien (ex: Calcaires de Rognac / Bégudien) - NE PAS CONFONDRE AVEC LE SANTONIEN.
-       - c6a = Campanien (ex: Valdo-Fuvélien)
-       - c5 = Santonien
-       - c4 = Coniacien
-       - c3 = Turonien
-       - c2 = Cénomanien
-     - 'j' = Jurassique
-     - 't' = Trias
-     - 'e' = Eocène
-     - 'g' = Oligocène
-     - 'm' = Miocène
-     - 'p' = Pliocène
-     - 'q' = Quaternaire
-     - 'h' = Carbonifère (Houiller)
-     - 'd' = Dévonien
-     - 's' = Silurien
-     - 'or' = Ordovicien
-     - 'k' = Cambrien
-   - Apply strict scientific rigor to determine the exact age and millions of years (Ma).
-3. PALEOGEOGRAPHY: The provided image is solely for you to deduce the paleogeography (environment, sea level, topography) and understand surrounding faults.
-4. FOSSILS (CRUCIAL): You must query your internal knowledge of the specific **BRGM geological map notice** (Notice explicative de la carte géologique 1/50000) for this exact location and formation (the one you definitively chose).
-   - Extract the EXACT fossil genera or species characteristic of this layer according to the official BRGM text (e.g., specific ammonites, rudistes, foraminifera, nummulites).
-   - NEVER use generic terms like 'mollusques', 'dinosaures', or 'bivalves' alone. Give high scientific precision.`;
-    } else if (wmsData?.rawResponse) {
-      // CASE 3: Only raw WMS text available
-      wmsInfo = `DB_HINT: Database raw response: ${wmsData.rawResponse.substring(0, 500)}`;
-      instructions = `1. Identify the exact code using the DB_HINT text first. Only if the DB_HINT is totally empty or unreadable should you guess from the exact center of the map image.
-2. Provide the scientific description matching the DB_HINT.
-3. For Fossils, base your response on the official BRGM notice for this exact unit, providing precise species/genera, avoiding generic terms.`;
+      instructions = `1. IDENTITY: You MUST use code "${manualCode}".
+2. DESCRIPTION: Use the "${manualCode}" code combined with the map sheet context and visual image to provide an accurate geological analysis.`;
     } else {
-      // CASE 4: No WMS info
-      instructions = `1. Identify the geological code strictly from the EXACT CENTER of the map image. Be careful with lower case (c = Crétacé) vs upper case.
-2. Provide the scientific description for that specific unit based on BRGM standards.
-3. For Fossils, base your response on the official BRGM notice for this region and unit, providing precise species/genera, avoiding generic terms.`;
+      wmsInfo = `BRGM_DATABASE_CONTEXT:
+- 1/50 000 Geological Map Sheet (Carte de référence): ${extractedMapSheet || 'Inconnue'}
+- Regional Lithology (1/1 000 000 BRGM): ${extractedDescription || 'Inconnue'} (Code litho: ${extractedCode || 'N/A'})
+- Raw BRGM Response: ${wmsData?.rawResponse ? wmsData.rawResponse.substring(0, 500) : 'None'}`;
+
+      instructions = `1. DÉTERMINATION DU CODE GÉOLOGIQUE ET DE LA FORMATION (CRUCIAL):
+   - Vous êtes sur la carte géologique 1/50 000 BRGM ("${extractedMapSheet || 'France'}").
+   - Identifiez le code/notation de la formation géologique sous le curseur au centre de l'image (ex: 'c6b', 'c5', 'e5', 'm2', 'j3', 'g1', 'Fy-z', 'R', 'n3', etc.).
+   - Utilisez vos connaissances approfondies des cartes géologiques 1/50 000 BRGM pour valider le code avec les couleurs chronostratigraphiques (Vert=Crétacé, Bleu=Jurassique, Jaune=Miocène/Pliocène, Orange/Marron=Eocène/Oligocène, Blanc/Gris=Quaternaire).
+
+2. STRATIGRAPHIE ET LITHOLOGIE EXPLICATIVE:
+   - Fournissez l'âge stratigraphique exact (ex: Maastrichtien, Santonien, Bartonien, Cénomanien, etc.) et l'âge estimé en millions d'années (ex: ~70 Ma).
+   - Rédigez une description lithologique détaillée de la formation telle que définie dans la notice explicative officielle BRGM de la feuille "${extractedMapSheet || 'carte 1/50 000'}".
+
+3. PALÉOGÉOGRAPHIE ET RECONSTITUTION:
+   - Décrivez l'environnement de dépôt (marin, lacustre, d'eau douce, etc.), le climat, le niveau marin et le paysage à l'époque.
+   - Indiquez le nom de la période majeure en anglais dans 'period_en' (ex: 'Cretaceous', 'Jurassic', 'Eocene', 'Triassic', 'Neogene') pour permettre la recherche d'une carte paléogéographique.
+
+4. FOSSILES CARACTÉRISTIQUES (NOTICE BRGM):
+   - Citez les fossiles caractéristiques répertoriés dans la notice BRGM pour cette formation précise et cette feuille géologique (genres/espèces d'ammonites, rudistes, foraminifères, etc.).
+   - Fournissez le nom scientifique du genre en nom simple dans 'scientific_query' (ex: 'Perisphinctes', 'Hippurites', 'Nummulites', 'Tetragonites') sans espaces pour permettre l'affichage de l'image Wikipedia.`;
     }
 
-    const prompt = `You are an expert geologist analysing a geological map of France (BRGM 1/50000).
-Your Goal: Identify the geological unit EXACTLY as provided by the database query or the user.
+    const prompt = `You are an expert geologist analyzing a 1/50 000 BRGM geological map of France.
+Your Goal: Provide an exact, high-precision scientific analysis of the geological formation at coordinates (Lat ${lat.toFixed(4)}, Lng ${lng.toFixed(4)}).
 
 Context:
-Location: Lat ${lat.toFixed(4)}, Lng ${lng.toFixed(4)}
 ${wmsInfo}
-Visual Map: See attached image for spatial context (faults, neighbors, geography).
+Visual Map Image: Attached 50k map snippet centered at coordinates.
 
 INSTRUCTIONS:
 ${instructions}
-IMPORTANT: ALL YOUR ANSWERS AND DESCRIPTIONS MUST BE IN FRENCH. 
-RÉPONDEZ OBLIGATOIREMENT EN FRANÇAIS. Toutes les données récupérées ou générées (lithologie, paléogéographie, âge, formation, description, fossiles) doivent être rédigées et traduites en français.
+CRITICAL: ALL ANSWERS MUST BE IN FRENCH.
+RÉPONDEZ OBLIGATOIREMENT EN FRANÇAIS.
 
-Response strictly in valid JSON:
-{"code":"[Exact code]","location_name":"commune","map_sheet":"feuille 1/50k","age":"stratigraphic age (en français)","age_ma":"âge estimé en millions d'années (ex: ~150 Ma)","formation":"formation name (en français)","lithology":"rock description (en français)","description":"detailed geological context (en français)","paleogeography":{"environment":"depositional environment (en français)","climate":"paleoclimate (en français)","temperature":"température moyenne estimée (ex: 25°C)","sea_level":"sea level (en français)","sea_level_m":"niveau marin par rapport à l'actuel (ex: +50m)","context":"landscape description (en français)","period_en":"Major geological period in English (ex: Jurassic, Cretaceous, Triassic - VERY IMPORTANT for map search)"},"fossils":[{"name":"Nom combiné pédagogique et latin (ex: Ammonite (Perisphinctes))","scientific_query":"STRICT NOM LATIN UNIQUE du genre sans espace (ex: Perisphinctes)"}]}`;
+Respond strictly in valid JSON:
+{
+  "code": "[Exact geological code notation, e.g. c6b, e5, m2, Fy-z]",
+  "confidence": "[0-100]%",
+  "verification_reason": "Explication courte de la validation du code",
+  "location_name": "Nom de la commune ou localité",
+  "map_sheet": "${extractedMapSheet || 'Nom de la feuille 1/50k'}",
+  "age": "Âge stratigraphique (en français, ex: Maastrichtien (Crétacé supérieur))",
+  "age_ma": "Âge estimé en Ma (ex: ~70 Ma)",
+  "formation": "Nom de la formation géologique (en français)",
+  "lithology": "Description des roches (en français)",
+  "description": "Explication géologique complète (en français)",
+  "paleogeography": {
+    "environment": "Environnement de dépôt (en français)",
+    "climate": "Paléoclimat (en français)",
+    "temperature": "Température moyenne estimée (ex: 22°C)",
+    "sea_level": "Niveau de la mer (en français)",
+    "sea_level_m": "Niveau relatif (ex: +80m)",
+    "context": "Paysage et paléoenvironnement (en français)",
+    "period_en": "Major period name in English (e.g. Cretaceous, Jurassic, Eocene, Triassic)"
+  },
+  "fossils": [
+    {
+      "name": "Nom pédagogique et latin (ex: Ammonite (Perisphinctes))",
+      "scientific_query": "Nom du genre latin sans espace (ex: Perisphinctes)"
+    }
+  ]
+}`;
 
-    // Build content parts
     const parts: any[] = [];
 
-    // Add image if available
     if (wmsData?.mapImageBase64) {
       parts.push({
         inlineData: {
@@ -165,10 +152,9 @@ Response strictly in valid JSON:
       });
     }
 
-    // Add text prompt
     parts.push({ text: prompt });
 
-    console.log("Calling Gemini API, code:", extractedCode || "none", "hasImage:", !!wmsData?.mapImageBase64);
+    console.log("Calling Gemini API with BRGM 50k sheet context:", extractedMapSheet || "None");
 
     const modelName = "gemini-2.5-flash";
     let attempts = 0;
@@ -183,31 +169,23 @@ Response strictly in valid JSON:
           contents: parts
         });
         text = response.text;
-        if (text) break; // Success
+        if (text) break;
       } catch (err: any) {
         console.warn(`Attempt ${attempts} failed: ${err.message}`);
-
-        // Check for Quota Exceeded (429)
         if (err.message && (err.message.includes('429') || err.message.includes('quota'))) {
-          console.error("Quota Exceeded for gemini-2.5-flash");
           throw new Error("Le quota de l'API Gemini 2.5 Flash est dépassé (Limité à 5 requêtes/min). Veuillez attendre 20 secondes avant de réessayer.");
         }
-
         if (attempts === maxAttempts) {
-          // Return a user friendly message for 503 overload
-          if (err.message.includes('503') || err.message.includes('Overloaded')) {
+          if (err.message?.includes('503') || err.message?.includes('Overloaded')) {
             throw new Error("Le modèle IA (Gemini 2.5) est actuellement surchargé. Veuillez réessayer dans quelques instants.");
           }
           throw err;
         }
-        // Simple backoff
         await new Promise(resolve => setTimeout(resolve, 2000 * attempts));
       }
     }
 
     if (!text) {
-      // Try without image as last resort if image was the issue (unlikely for 503 but possible for 400s)
-      console.log("Empty response, retrying without image...");
       try {
         const retryResponse = await ai.models.generateContent({
           model: modelName,
@@ -223,7 +201,6 @@ Response strictly in valid JSON:
       throw new Error("Réponse vide de l'IA");
     }
 
-    // Clean response
     text = text.replace(/```json\n?/g, '').replace(/```/g, '').trim();
     const firstBrace = text.indexOf('{');
     const lastBrace = text.lastIndexOf('}');
@@ -239,12 +216,6 @@ Response strictly in valid JSON:
       throw new Error("Format de réponse invalide");
     }
 
-    // REMOVED: Force code override logic
-    // We now trust the AI's visual analysis over the harmonized layer if they differ
-    if (extractedCode && data.code !== extractedCode) {
-      console.log(`AI chose code "${data.code}" over harmonized "${extractedCode}". Accepting AI choice.`);
-    }
-
     const result: GeologyAnalysis = {
       ...data,
       coords: { lat, lng },
@@ -256,7 +227,6 @@ Response strictly in valid JSON:
 
   } catch (error: any) {
     console.error("Error:", error?.message || error);
-    // Send 500 but with clean error message for frontend
     res.status(500).json({
       error: error?.message || "Erreur inconnue lors de l'analyse"
     });
